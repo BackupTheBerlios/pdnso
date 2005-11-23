@@ -1,0 +1,60 @@
+<BR>
+
+<FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>">
+<INPUT TYPE=hidden name=action value=url_add>
+<INPUT TYPE=hidden name=Cid value="<TMPL_VAR NAME=CID>">
+
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<TR>
+	<TH BGCOLOR=#7d9fc4 COLSPAN=5><FONT COLOR=#FFFFFF><TMPL_VAR NAME=DOMAIN> - Add URL Redirection Entry</FONT></TH>
+</TR>
+<TR>
+	<TH BGCOLOR=#98c2f0 COLSPAN=2>Action</TH>
+	<TH BGCOLOR=#98c2f0>Record URL</TH>
+	<TH BGCOLOR=#98c2f0>Forward To URL</TH>
+	<TH BGCOLOR=#98c2f0>URL Cloaking</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><INPUT TYPE=submit value=Add></TD>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><A class=sidelink HREF="<TMPL_VAR NAME=CANCEL>">Cancel</A></TD>
+	<TD BGCOLOR=#d0e1f5><INPUT TYPE=text name=record maxlength="<TMPL_VAR NAME=MAX_RECORD_LENGTH>" value=""><TMPL_VAR NAME=DOMAIN></TD>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><SELECT name=secure><OPTION VALUE=0>http://</OPTION><OPTION VALUE=1>https://</OPTION></SELECT><INPUT TYPE=text name=forwardto maxlength=255></TD>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><INPUT TYPE=checkbox name=cloak value=1></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>(optional) Page to redirect to:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=3><INPUT TYPE=text name=page maxlength=255 size=30></TD>
+</TR>
+<TR>
+	<TH BGCOLOR=#d0e1f5 COLSPAN=5>Cloak Settings (optional):</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Page Title:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=3><INPUT TYPE=text name=title maxlength=255 size=30></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Meta tag keywords:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=3><INPUT TYPE=text name=keywords maxlength=255 size=30></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Meta tag description:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=3><INPUT TYPE=text name=description maxlength=255 size=30></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=5>Description:<HR>
+	Record URL: This is the external URL that will be pointed to your site.<HR>
+	Forward To URL: This is the URL or IP of the server your site resides on. If your site lived at http://www.othersite-<TMPL_VAR NAME=DOMAIN>/~mysite/, this field should contain "www.othersite-<TMPL_VAR NAME=DOMAIN>/~mysite/".<HR>
+	URL Cloaking: If checked, when users are directed to your site, the url in the "Record URL" field will remain in their browsers Location field. The optional Cloak Settings can also be used to set the title and meta tags for your site.<HR>
+	Page to redirect to:<BR>
+	If filled in, all requests for any page at the "Record URL" will be directed to this page on the "Forward To URL". For example, assuming this field contained "mypage.html", a request for http://yourrecord.<TMPL_VAR NAME=DOMAIN>/test.html would be forwarded to http://www.othersite-<TMPL_VAR NAME=DOMAIN>/~mysite/mypage.html<BR>
+	If blank, requests for pages at the "Record URL" will be redirected to the same page under your "Forward To URL". For example, assuming the same settings as above, a request for http://yourrecord.<TMPL_VAR NAME=DOMAIN>/dir/test.html would be forwarded to http://www.othersite-<TMPL_VAR NAME=DOMAIN>/~mysite/dir/test.html<HR>
+	Page Title: Title for the page (only applicable if URL Cloaking is enabled)<HR>
+	Meta tag keywords: Search engine keywords. If a search engine indexes your page, it will use the "Record URL" and these keywords. (only applicable if URL Cloaking is enabled)<HR>
+	Meta tag description: Search engine description. If a search engine indexes your page, it will use the "Record URL" and this description. (only applicable if URL Cloaking is enabled)
+	</TD>
+</TR>
+</TABLE>
+</TD></TABLE>
+</FORM>

@@ -1,0 +1,266 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/check_pending_domains.cron,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+
+=head1 NAME
+
+check_pending_domains.cron - Public-DNS.org script to process the pending domains queue. Should be run from cron ever 15 minutes or so.
+
+=head1 SEE ALSO
+
+utils/dns_crontab
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use Net::DNS::Resolver::Recurse; # use of dig is depreciated
+use PublicDNS::DBlib;
+use PublicDNS::Utils;
+use PublicDNS::Auth; # to get the tmpl_dir set
+use PublicDNS::Config;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $DEBUG = 0;
+my @root_dns_servers = split(',', $cfg->{'dig_settings'}->{'root_name_servers'});
+@root_dns_servers    = ('198.41.0.4','192.58.128.30','202.12.27.33','198.32.64.12') unless @root_dns_servers;
+my $dig              = $cfg->{'dig_settings'}->{'dig_exe'}              || '/usr/local/bin/dig'; # depreciated
+my $our_dns_server   = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
+my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $system_name      = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+my $email_sig = $cfg->{'system'}->{'email_sig'} || 'support';
+my $root_uri  = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri     =~ s/\/+$//; # remove trailing slash
+
+my ($config_statuses,$config_statusesmap) = load_config_statuses;
+
+my $dns_handle = Net::DNS::Resolver::Recurse->new;
+$dns_handle->debug(0);
+$dns_handle->retry(2);
+$dns_handle->hints(@root_dns_servers); # root servers
+
+my $now = time;
+my $weekago = $now - (60*60*24*14);
+my $notify_period = $now - (60*60*24); # remind them of failures once a day
+
+my $sqlnow = SQLSelect("NOW()");
+
+my $get_pending = IteratedSQLSelect(
+    "c.Cid,c.ownerid,c.zone,c.tld,UNIX_TIMESTAMP(c.added),UNIX_TIMESTAMP(p.lastcheck),UNIX_TIMESTAMP(p.notified),master",
+    "conf c, pending_data p",
+    "c.Cid = p.Cid AND c.status != " . SQLQuote($config_statuses->{'Active'})
+    );
+while(my ($cid,$ownerid,$zone,$tld,$added,$lastcheck,$notified,$master) = $get_pending->fetchrow_array)
+{
+    if ($added < $weekago)
+    {   # it's been pending for 2 weeks, delete it, and let them know
+        # get one of their uid's
+        my ($uid) = SQLSelect("uid","logins","ownerid = " . SQLQuote($ownerid));
+        # calls to PublicDNS::Utils package to do the magic
+        if (&send_domain_delete($cid,$uid))
+        {   # notify the user
+            &notify_user("delete",$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master);
+        } else {
+            warn "unable to send domain delete for cid[$cid] $zone.$tld\n";
+        }
+    } else {
+        if (&check_roots("$zone.$tld"))
+        {   # it's ok. Send them an e-mail with the key so they can ack it.
+            # check to make sure it's not a duplicate before sending auth
+            my ($zone_exists) = SQLSelect('cid','conf','status = ' . SQLQuote($config_statuses->{'Active'}) . ' AND zone = ' . SQLQuote($zone) . ' AND tld = ' . SQLQuote($tld) );
+            if ($zone_exists)
+            {
+                &notify_user("duplicate",$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master);
+                my ($uid) = SQLSelect("uid","logins","ownerid = " . SQLQuote($ownerid));
+                unless (&send_domain_delete($cid,$uid))
+                {
+                    warn "unable to send domain delete for cid[$cid] $zone.$tld\n";
+                }
+            } else {
+                &notify_user("ok",$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master);
+                SQLUpdate("conf",['status'],[$config_statuses->{'Active'}],'Cid = ' . SQLQuote($cid));
+                SQLDelete('pending_data','Cid = ' . SQLQuote($cid));
+            }
+        } else {
+            if (! $lastcheck)
+            {   # first time checking failed, let the user know
+                &notify_user("firstfail",$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master);
+                SQLUpdate('conf',['status'],[$config_statuses->{'Check failed'}],'Cid = ' . SQLQuote($cid));
+                SQLUpdate('pending_data',['lastcheck','notified'],[$sqlnow,$sqlnow],'Cid = ' . SQLQuote($cid));
+            } else {
+                if ($notified < $notify_period)
+                {   # still failing for past 24 hr's, let the user know.
+                    &notify_user("repeatfail",$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master);
+                    SQLUpdate('pending_data',['lastcheck','notified'],[$sqlnow,$sqlnow],'Cid = ' . SQLQuote($cid));
+                } else {
+                    SQLUpdate("pending_data",['lastcheck'],[$sqlnow],'Cid = ' . SQLQuote($cid));
+                }
+            }
+        }
+    }
+}
+$get_pending->finish;
+
+sub notify_user
+{
+    my ($action,$cid,$ownerid,$zone,$tld,$added,$lastcheck,$master) = @_;
+
+    my %mail = ( from   => $reply_to );
+
+    if ($action eq "delete")
+    {
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_pending_delete.tmpl");
+        $tmpl->param(SYSTEM_NAME => $system_name);
+        $tmpl->param(EMAIL_SIG => $email_sig);
+        $tmpl->param(ROOT_URI => $root_uri);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        $mail{subject} = "$system_name - pending domain removed - $zone.$tld";
+        $mail{msg} = $tmpl->output;
+
+    } elsif ($action eq "firstfail") {
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_pending_firstfail.tmpl");
+        $tmpl->param(EMAIL_SIG => $email_sig);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        $tmpl->param(OUR_DNS_SERVER => $our_dns_server);
+        $mail{subject} = "$system_name - domain NS record check failed - $zone.$tld";
+        $mail{msg} = $tmpl->output;
+
+    } elsif ($action eq "repeatfail") {
+        my $hours_in_queue = int( (time - $added) / (60*60) );
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_pending_repeatfail.tmpl");
+        $tmpl->param(EMAIL_SIG => $email_sig);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        $tmpl->param(OUR_DNS_SERVER => $our_dns_server);
+        $tmpl->param(HOURS_IN_QUEUE => $hours_in_queue);
+        $mail{subject} = "$system_name - domain NS record check failed - $zone.$tld";
+        $mail{msg} = $tmpl->output;
+
+    } elsif ($action eq "ok") {
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_pending_ok.tmpl");
+        $tmpl->param(EMAIL_SIG => $email_sig);
+        $tmpl->param(ROOT_URI => $root_uri);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        $mail{subject} = "$system_name - domain authorized - $zone.$tld";
+        $mail{msg} = $tmpl->output;
+
+    } elsif ($action eq "duplicate") {
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_pending_duplicate.tmpl");
+        $tmpl->param(EMAIL_SIG => $email_sig);
+        $tmpl->param(ROOT_URI => $root_uri);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        $mail{subject} = "$system_name - duplicate domain - $zone.$tld";
+        $mail{msg} = $tmpl->output;
+
+    } else {
+        return;
+    }
+
+    # send off the messages
+    my %emails;
+    my $get_emails = IteratedSQLSelect("login","logins","ownerid = $ownerid");
+    while(my ($email) = $get_emails->fetchrow_array)
+    {
+        $emails{$email}++;
+    }
+    $get_emails->finish;
+    foreach my $email (keys %emails)
+    {
+        if ($email =~ /^[^\@]+\@[^\@]+\.[^\@]+$/)
+        {
+            $mail{to} = $email;
+            &send_mail(%mail);
+        }
+    }
+}
+
+sub check_roots
+{
+    my $zone = shift;
+    $zone .= "." unless ($zone =~ /\.$/);
+
+    my $t = $our_dns_server;
+    $t   .= '.' unless $t =~ /\.$/; # append dot if needed
+    my $q_our_dns_server = "\Q$t\E";
+
+    warn "looking at $zone\n" if $DEBUG;
+    my $packet = $dns_handle->query_dorecursion($zone,'NS');
+    #   should return Net::DNS::Packet object, or undef if no answers found
+    if ($DEBUG && $packet) { warn "got packet for $zone\n"; }
+    elsif ($DEBUG) { warn "didn't get packet for $zone\n"; }
+    return 0 unless $packet;
+    foreach my $result ($packet->answer)
+    {
+        if ($DEBUG && ($result->type eq 'NS'))
+        {
+            warn "\tNS: " . $result->rdatastr . "\n";
+        }
+        if (($result->type eq 'NS') && ($result->rdatastr =~ /^$q_our_dns_server$/i))
+        {   # found our NS record in their shit, it's cool
+            return 1;
+        }
+    }
+    return 0; # didn't find us in their stuff
+}
+
+sub check_roots_old
+{
+    my $zone = shift;
+    my $t = $our_dns_server;
+    $t   .= '.' unless $t =~ /\.$/; # append dot if needed
+    my $q_our_dns_server = "\Q$t\E";
+
+    my @ret_val;
+    # safely execute a command without haveing to worry about shell escapes
+    my $pid;
+    die "cannot fork: $!" unless defined($pid = open(CHILD, "-|"));
+    if ($pid)
+    {   # parent
+        while (<CHILD>)
+        {
+            push(@ret_val,$_);
+        }
+        close(CHILD);
+    } else {    # child
+        exec($dig,$zone,'ns','+noall','+answer');
+    }
+
+    foreach(@ret_val)
+    {
+        next if (/^\s*$/);
+        next if (/^;/);
+        if (/\s+NS\s+$q_our_dns_server\s*$/i)
+        {   # found our NS record in their shit, it's cool
+            return 1;
+        }
+    }
+}

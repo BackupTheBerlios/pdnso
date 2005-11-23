@@ -1,0 +1,213 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/find_lame_domains.cron,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+
+=head1 NAME
+
+find_lame_domains.cron - Public-DNS.org script to identify all domains in our database, which no longer have us listed as their DNS providers in the root name servers.
+
+=head1 SYNOPSIS
+
+Should be run from cron ever week. Emails results to the admin.
+
+ find_lame_domains.cron (-r) (-R) (-d) (-v)
+
+    -r Remove lame zones.
+    -R Also remove lame zones without any name servers.
+    -d debugging mode
+    -v verbose mode
+
+=head1 SEE ALSO
+
+utils/dns_crontab
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+
+use strict;
+use Getopt::Std;
+use Net::DNS::Resolver::Recurse; # use of dig is depreciated
+use PublicDNS::DBlib;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $DEBUG = 0;
+my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $admin_email      = $cfg->{'system'}->{'admin_email_addr'}    || 'root';
+my @root_dns_servers = split(',', $cfg->{'dig_settings'}->{'root_name_servers'});
+@root_dns_servers    = ('198.41.0.4','192.58.128.30','202.12.27.33','198.32.64.12') unless @root_dns_servers;
+my $our_dns_server   = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
+my @our_dns_servers  = split(',', $cfg->{'dig_settings'}->{'our_dns_server_name_list'});
+@our_dns_servers     = ($our_dns_server) unless @our_dns_servers;
+my %our_dns_servers  = map { $_ => 1 } @our_dns_servers;
+
+my ($config_statuses,$config_statusesmap) = load_config_statuses;
+
+my $dns_handle = Net::DNS::Resolver::Recurse->new;
+$dns_handle->debug(0);
+$dns_handle->retry(2);
+$dns_handle->hints(@root_dns_servers); # root servers
+
+my %opt;
+getopts('Rrdv',\%opt);
+
+my $VERBOSE = $opt{v} ? 1 : 0;
+$DEBUG++ if $opt{d};
+warn "Debugging enabled...\n" if $DEBUG;
+
+my $Remove++ if $opt{r};
+$Remove++ if $opt{R};
+if ($Remove)
+{
+    print "Are you sure you want to remove all lame zones? [y|N] ";
+    my $rm = <STDIN>;
+    chomp($rm);
+    $Remove = 0 if ($rm !~ /^[yY]/);
+    if ($Remove > 1)
+    {
+        print "Are you sure you want to also remove lame zones we aren't able to find a name server for? [y|N] ";
+        my $rm = <STDIN>;
+        chomp($rm);
+        $Remove-- if ($rm !~ /^[yY]/);
+    }
+}
+
+my $mail_message = "Below is a list of all the zones in dns database that are marked as
+live, but don't have our name servers:
+(" . join(',', keys %our_dns_servers) . ")
+on their domain:
+------------------------------------------------------------------------\n";
+
+my $get_all_zones = IteratedSQLSelect('Cid,zone,tld','conf','status = ' . SQLQuote($config_statuses->{'Active'}) ,'ORDER BY zone,tld');
+while (my ($cid,$zone,$tld) = $get_all_zones->fetchrow_array)
+{
+    warn "working on [$zone.$tld]\n" if $DEBUG;
+    my ($ok,@nss) = &check_roots("$zone.$tld");
+    if ($ok)
+    {   # it's ok. We can keep it on the server
+        warn "\tok\n" if $DEBUG;
+    } else {
+        warn "\tlame\n" if $DEBUG;
+        $mail_message .= "$zone.$tld\t: lame\n";
+        if ( (@nss && $Remove) || ($Remove > 1) )
+        {
+            warn "\tRemoving lame zone\n" if $DEBUG;
+            if ($VERBOSE)
+            {
+                print "Are you sure [yn] : ";
+                my $ans = <STDIN>;
+                chomp($ans);
+                if ($ans =~ /^y/i)
+                {
+                    $mail_message .= "\t[Removing lame zone]\n";
+#                   SQLDelete('conf','Cid = ' . SQLQuote($cid) );
+                    &delete_domain($cid);
+                } else {
+                    $mail_message .= "\t[Not Removing]\n";
+                }
+            }
+        }
+        if (@nss)
+        {
+            $mail_message .= "\t" . join("\n\t",@nss) . "\n";
+        } else {
+            $mail_message .= "\t[no name servers found]\n";
+        }
+    }
+}
+$get_all_zones->finish;
+if ($mail_message)
+{
+    my %mail = ( from       => $reply_to,
+                 to         => $admin_email,
+                 subject    => 'lame zones - ' . localtime(),
+                 msg        => $mail_message
+               );
+    &send_mail(%mail);
+}
+
+sub check_roots
+{
+    my $zone = shift;
+    $zone .= "." unless ($zone =~ /\.$/);
+
+    # build nice regex from hash of our dns servers
+    my $q_our_dns_servers = "(".join('|', map { "\Q$_.\E" } keys %our_dns_servers ).")";
+
+    warn "looking at $zone\n" if $DEBUG;
+    my $packet = $dns_handle->query_dorecursion($zone,'NS');
+    #   should return Net::DNS::Packet object, or undef if no answers found
+    if ($DEBUG && $packet) { warn "got packet for $zone\n"; }
+    elsif ($DEBUG) { warn "didn't get packet for $zone\n"; }
+    return 0 unless $packet;
+    my @nss;
+    foreach my $result ($packet->answer)
+    {
+        if ($result->type eq 'NS')
+        {
+            push(@nss,$result->rdatastr);
+        }
+        if ($DEBUG && ($result->type eq 'NS'))
+        {
+            warn "\tNS: " . $result->rdatastr . "\n";
+        }
+        if (($result->type eq 'NS') && ($result->rdatastr =~ /^$q_our_dns_servers$/i))
+        {   # found our NS record in their shit, it's cool
+            return 1;
+        }
+    }
+    return (0,@nss); # didn't find us in their stuff, but found the domain
+}
+
+sub delete_domain
+{
+    my $Cid = shift;
+
+    # build backup file
+    # build message to send
+    # get login e-mails for this zone
+    # send "remove" query to pdsys
+    # clean up old shit
+    my $get_records = IteratedSQLSelect("RRid,type","RRs","Cid = $Cid");
+    while(my ($rrid,$rrtype) = $get_records->fetchrow_array)
+    {
+        SQLDelete("RR_$rrtype","RRid = $rrid");
+    }
+    $get_records->finish;
+    SQLDelete("RRs","Cid = $Cid");
+    SQLDelete("conf","Cid = $Cid");
+    SQLDelete('pending_data',"Cid = $Cid"); # notifications
+    # send backup to user
+    # add log message that it was automatically deleted
+}
+

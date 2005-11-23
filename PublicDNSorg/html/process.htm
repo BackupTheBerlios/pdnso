@@ -1,0 +1,177 @@
+<HTML><HEAD></HEAD><BODY>
+<PRE>
+
+Public-dns usage process.
+-------------------------
+
+New users:
+----------
+	Go to signup.html
+	enter Name, desired login, password, email
+		Check password, make sure it's strong enough.
+		Store info in pending_logins
+		Send them confirmation e-mail.
+		Tell them (via html responce page) they need to ack the e-mail.
+	Check e-mail.
+	Go to link in e-mail w/ web browser. (this confirms e-mail is valid).
+		info from pending_logins is moved to logins
+		send them a welcome e-mail.
+		log them in, and send them to informative page on how to add a domain.
+
+Existing users:
+---------------
+	To to our site.
+	Login.
+	Click on domain admin.
+
+Registering a new domain:
+-------------------------
+	Before adding a domain to public-dns, it must be registered with a
+	valid domain authority.
+	See the following for a list of accredited domain registrars:
+		http://www.icann.org/registrars/accredited-list.html
+	When registering your domain with one of those registars, be sure to
+	include our DNS name servers as authority name servers for the domain.
+		dns1.public-dns.net
+		dns2.public-dns.net
+		dns3.public-dns.net
+	Once completed, move onto "Adding a new domain"
+
+Moving a domain to public-dns:
+------------------------------
+	Contact the domain registrar authoritive for your domain, and modify
+	it's authoritive name servers list, either changing the existing
+	entries to our servers, or adding our servers to the list.
+	Our servers are:
+		dns1.public-dns.net
+		dns2.public-dns.net
+		dns3.public-dns.net
+	Once completed, move onto "Adding a new domain"
+
+Adding a new domain:
+--------------------
+	From domain admin.
+	click on "Add domain"
+	Enter domain name, select extension, select master or slave, submit.
+		Store info in Pending
+		Tell them (via html responce page) of status.
+		Check Pending every 15min. Send them e-mail notifying of results.
+
+Editing a domain:
+-----------------
+	After a domain has been accepted, From domain admin.
+	enter domain name in text field, and click "List this domain"
+		or
+	click list all domains, and click the domain you'd like to edit.
+
+Deleting a domain:
+------------------
+	Two ways:
+		1) From list all domains.
+		   click "delete" next to the domain you'd like to remove.
+		   It'll ask you to confirm that, click yes.
+		2) From "Editing a domain".
+		   click "Delete" in the upper right corner of table holding
+		   domain records.
+	Email is sent to the owners with a list of all records.
+	Deleted domains go into a pending queue and will be flushed
+	every 12 hours.
+
+Editing the SOA for a domain:
+-----------------------------
+	From "Editing a domain" above.
+	Click "Edit SOA".
+	Make any changes you'd like.
+	Click "Modify"
+
+Adding records:
+---------------
+	From "Editing a domain" above.
+	Select the type of record you would like to add from the drop down
+	menu below the SOA information.
+	Click "Add Record" button to the left of that list.
+	Fill out the form at top, and click "Add".
+	Record updates will go live within 15minutes.
+
+Editing records:
+----------------
+	From "Editing a domain" above.
+	Click "Edit" next to the record you would like to modify.
+	Modify it's values, and click "Modify" in the form provided.
+	Record updates will go live within 15minutes.
+
+Deleting records:
+-----------------
+	From "Editing a domain" above.
+	Click "Delete" next to the record you would like to remove.
+	Click "Delete" in the form provided.
+	Record updates will go live within 15minutes.
+
+Lost Passwords:
+---------------
+	If you forgot or lost your password, click on the "Lost Password" link,
+	and enter your login or domain name. Your password will be e-mailed to
+	the e-mail address you registered with. If that e-mail address is no
+	longer yours, please send us an e-mail at support@Public-DNS.org
+	and we will contact you with instructions on how to restore your
+	ownership of the domain.
+
+DNS Record Limitations:
+-----------------------
+	records may only contain the following characters:
+		A-Z a-z 0-9 period(.) dash(-)
+	neither domains nor records may start with nor end with dash(-)
+	invalid characters will be stripped before attempting to process them.
+	domains (including the .com type extension) have a max length of 63 characters
+	records, including the full domain, have a max lenth of 255 characters
+DNS Record Automatic Interpretation:
+------------------------------------
+	When entering a record, public-dns will attempt to figure out what the
+	record should really be.
+	For example, assuming your domain is "mydomain.com":
+		www will be interpreted as:
+			www.mydomain.com.
+		www.test.com will be interpreted as:
+			www.test.com.mydomain.com.
+		www.test.com. will be interpreted as:
+			www.test.com.mydomain.com.
+		www.mydomain.com will be interpreted as:
+			www.mydomain.com.
+		www.mydomain.com. will be interpreted as:
+			www.mydomain.com.
+
+Record Explainations:
+---------------------
+	A  : Address records. Points domain records (ie. www.mydomain.com.)
+	     directly to IP addresses (ie. 192.168.0.1)
+	MX : Mail Exchanger records. Points domain records (ie. mydomain.com.)
+	     to mail servers in order to direct mail for the domain record
+	     to the mail server. The mail server entered must be a domain
+	     record itself that is an A record (like mail.mydomain.com.)
+	     and must end in a period.
+	CNAME : Canonical Name records. Points domain records (ie. www.mydomain.com.)
+	        to other domain records (ie. mydomain.com.).
+	        The domain record you are pointing to may even exist in another
+	        domain (ie. someoneelsesdomain.com.).
+	        CNAMEs must point to records that are A records.
+	NS : Name Server records. Informs of what name servers are authoritive
+	     for domain. ie.
+			mydomain.com. IN NS dns1.public-dns.net.
+	TXT : Text records. Points domain records (ie. info.mydomain.com.)
+	      to any string of text (under 256 characters). ie.
+	      	info.mydomain.com. IN TXT "owned by John Smith"
+	HINFO : Host Info records. Points domain records (ie. www.mydomain.com.)
+	        to information about a host. You can enter any arbitrary text
+	        into each of the two fields (under 256 characters per field).
+	        History: Before MX records, HINFO records were used to
+	        determin were the domains mail server was located. ie.
+	        	mydomain.com. IN HINFO "mail server" "smtp.server.com:25"
+	Other Types : DNS supports other types of records as well.
+	              public-dns currently doesn't support any other types
+	              however, if you require the use of some other record type,
+	              just let us know at support@Public-DNS.org and we'll
+	              get it added.
+
+
+</PRE>
+</BODY></HTML>

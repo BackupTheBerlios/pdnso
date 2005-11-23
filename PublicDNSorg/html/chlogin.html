@@ -1,0 +1,128 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/chlogin.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:30 $
+# $Author: unrtst $
+
+=head1 NAME
+
+chlogin.html - Public-DNS.org change login frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard escape unescape);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+    if ($Q::key)
+    {
+        &change($uid);
+    } else {
+        &default($uid);
+    }
+}
+
+sub change
+{
+    my $uid = shift;
+    my $key = unescape($Q::key);
+    $key =~ /^(.+?)&(.+?)&(.+)$/s; # treat string as single line, split on first &
+    my $key_uid = $1;
+    my $key_email = $2;
+    my $key_passwd = $3;
+    my ($conf_uid,$crypt_passwd) = SQLSelect("uid,passwd","logins","uid = $key_uid");
+    my $exists = SQLSelect("uid","logins","login = " . SQLQuote($key_email));
+
+    if ($exists)
+    {
+        &print_top($uid,$thisscript,'Change login');
+
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/chlogin.tmpl', cache => 1);
+        $tmpl->param(ERROR => "Invalid Email. The email address you are attempting to change your login to has already been used.");
+        print $tmpl->output;
+        return;
+    }
+
+    unless ($conf_uid && ($crypt_passwd eq $key_passwd) )
+    {
+        &print_top($uid,$thisscript,'Change login');
+
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/chlogin.tmpl', cache => 1);
+        $tmpl->param(ERROR => "Invalid Key. Please re-enter your key below.");
+        print $tmpl->output;
+        return;
+    }
+
+    SQLUpdate('logins',['login'],[$key_email],"uid = $conf_uid");
+
+    # try to log them out
+    &PublicDNS::Auth::logout();
+
+    &print_top($uid,$thisscript,'Change login');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/chlogin_conf.tmpl', cache => 1);
+    $tmpl->param(EMAIL => $key_email);
+    print $tmpl->output;
+
+    &print_bottom;
+}
+
+sub default
+{
+    my $uid = shift;
+    my $errormsg = shift;
+    &print_top($uid,$thisscript,'Change login');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/chlogin.tmpl', cache => 1);
+    $tmpl->param(ERROR => $errormsg);
+    print $tmpl->output;
+
+    &print_bottom;
+}
+

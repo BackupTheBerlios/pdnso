@@ -1,0 +1,120 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/admin/banner_admin.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+banner_admin.html - Public-DNS.org banner administration frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use CGI qw(:standard);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "add")
+    {
+        &add;
+    } elsif ( ($Q::action eq "delete") && ($Q::id =~ /^\d+$/) ) {
+        &del($Q::id);
+    } else {
+        &default;
+    }
+}
+
+sub del
+{
+    my $id = shift;
+    SQLDelete("banners","BannerID = $id");
+    print redirect($thisscript);
+}
+
+sub add
+{
+    if ($Q::linkurl && $Q::bannerurl && $Q::Preferance)
+    {
+        SQLInsert("banners",
+           ['BannerID','Preferance','linkurl','bannerurl','active'],
+           ['NULL',$Q::Preferance,$Q::linkurl,$Q::bannerurl,1] );
+    }
+    print redirect($thisscript);
+}
+
+sub default
+{
+    print header;
+    print "<HTML><HEAD></HEAD><BODY>
+    This just modifies the data in our banners table. You'll still need to stick the banner somewhere we can get to it.<BR>
+    Preferance controls how often a certain banner will show up. The higher the number, the more likely it will show up. The way this works is that every time a banner is fetched, all banners are thrown into an array once for each preferance value they have (so it their preferance is 20, there will be 20 instances thrown into the array), then a random number is generated between 0 and how many total entries in the array there are, and the banner matching that random number get's pulled out.
+    <HR>
+    <FORM METHOD=post action=$thisscript>
+    <INPUT TYPE=hidden name=action value=add>
+    Banner Image URL:<INPUT TYPE=text name=bannerurl size=50 maxlength=255><BR>
+    URL to link to:<INPUT TYPE=text name=linkurl size=50 maxlength=255><BR>
+    Preferance:<SELECT name=Preferance>\n";
+    for (1 .. 50) { print "<OPTION>$_\n"; }
+    print "</SELECT><BR>
+    <INPUT TYPE=submit value=Add>
+    </FORM>
+    <BR>
+    <TABLE BORDER=1>
+    <TR>
+        <TH>Action</TH>
+        <TH>Preferance</TH>
+        <TH>Link URL</TH>
+        <TH>Image URL</TH>
+        <TH>Active</TH>
+    </TR>\n";
+
+    my $getall = IteratedSQLSelect("BannerID,Preferance,linkurl,bannerurl,active","banners","","ORDER BY linkurl, Preferance");
+    while(my ($id,$pref,$linkurl,$bannerurl,$active) = $getall->fetchrow_array)
+    {
+        print "    <TR>
+        <TD><A HREF=\"$thisscript?action=delete\&id=$id\">Delete</A></TD>
+        <TD>$pref</TD>
+        <TD>$linkurl</TD>
+        <TD>$bannerurl</TD>
+        <TD>$active</TD>
+    </TR>\n";
+    }
+    $getall->finish;
+
+    print "</TABLE></BODY></HTML>\n";
+}

@@ -1,0 +1,95 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/send_backups.cron,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+=head1 NAME
+
+send_backups.cron - Public-DNS.org script to send backups of domains to users. Should be run from cron weekly and monthly.
+
+=head1 SYNOPSIS
+
+ perl send_backups.cron weekly
+
+OR
+
+ perl send_backups.cron monthly
+
+=head1 SEE ALSO
+
+utils/dns_crontab
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use PublicDNS::DBlib;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $reply_to    = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $system_name = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+&main;
+
+sub main
+{
+    my %backup_period = (
+        "weekly" => 1,
+        "monthly" => 2
+        );
+
+    my $backup_period;
+    if ($backup_period{$ARGV[0]})
+    {
+        $backup_period = $backup_period{$ARGV[0]};
+    } else {
+        $backup_period = 1;
+    }
+
+    my $get_backup_users = IteratedSQLSelect('login,ownerid','logins',"sendbackups = $backup_period");
+    while (my ($login,$ownerid) = $get_backup_users->fetchrow_array)
+    {
+        my %mail = (
+            to  => $login,
+            from    => $reply_to,
+            );
+        my $get_domains = IteratedSQLSelect('Cid,zone,tld','conf',"ownerid = $ownerid");
+        while (my ($Cid,$zone,$tld) = $get_domains->fetchrow_array)
+        {
+            $mail{subject} = "$system_name backup of domain: $zone.$tld";
+            $mail{msg} = &build_db_file($Cid);
+            &send_mail(%mail);
+        }
+        $get_domains->finish;
+    }
+    $get_backup_users->finish;
+}
+

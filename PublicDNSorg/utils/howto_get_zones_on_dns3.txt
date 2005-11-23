@@ -1,0 +1,4 @@
+login to dns3, and execute:
+ls /etc/namedb/sand/etc/namedb/zones/ | ssh ${USER}@your_webserver 'cat > /some/path/name/zones_on_dns3.txt'
+
+

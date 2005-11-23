@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/tldrequest.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+tldrequest.html - Public-DNS.org TLD request form.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use CGI qw(:standard);
+use Mail::Sendmail;
+use PublicDNS::Auth;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $default_from  = $cfg->{'system'}->{'webcontact_from_email_addr'} || 'webcontact';
+my $email         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $ip=$ENV{REMOTE_ADDR};
+
+&error;
+&mail;
+
+sub mail
+{
+    my $from = ($Q::email =~ /^[^\s\@]+\@[^\s\@]+\.[^\s\@]+$/) ? $Q::email : $default_from;
+    my %mail =
+        ( To      => $email,
+          From    => $from,
+          Subject => 'Request new TLD',
+          Message => "
+
+        TLD : $Q::tld
+       Name : $Q::name
+     E-Mail : $Q::email
+         IP : $ip"
+    );
+
+    sendmail(%mail);
+}
+
+sub error
+{
+    if ($Q::tld eq '' || $Q::email eq '' || $Q::name eq '')
+    {
+        print header(); print "<Center>";
+        my $error;
+        if ($Q::tld eq ''){$error=1;print "<br>No tld Name";}
+        if ($Q::name eq ''){$error=1;print "<br>Please Enter a Name $Q::name";}
+        if ($Q::email eq ''){$error=1;print "<br>No E-mail address";}
+        print "<br><br>Please Hit BACK and type again.</Center>";
+        exit;
+    }
+    return 0;
+}
+
+
+    print redirect("/");

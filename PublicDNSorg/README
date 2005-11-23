@@ -1,0 +1,95 @@
+PublicDNS.org DNS management system.
+    PublicDNS.org is a web based DNS management system. It currently runs
+    www.public-dns.org, which offers free public dns and url redirection
+    services.
+
+    This project provides everything needed to run such a site, including
+    backend code which cooperates with BIND, various daemons, and the front
+    end. It does need a database (MySQL currently supported), DNS server
+    (BIND currently supported), webserver that can run cgi scripts, and the
+    ability to run sripts on the server and on the dns servers.
+
+    Version 2.001 is the initial public release of the source code for
+    PublicDNS.org.
+
+    Documentation is currently in poor state, but should be adaquate to
+    getting this distribution up and running. The codebase has been used in
+    a production environment for thousands of domains for several years.
+
+    Of the documentation we do have, an overview of the workflow is
+    available in html/process.htm, there is online help built into the
+    system, and the install documentation (docs/INSTALL.pod) is fairly
+    complete.
+
+    Please note, a complete re-write is currently underway. This version was
+    put out there in order to "light a fire under our buts" :-) We had
+    intended to release this under the GPL years ago, but wanted to do a
+    complete re-write first. Of course, since it was running fine as is, we
+    put off re-writing it, and thus put off releasing it. So, in the end
+    (now), we've decided to do as few updates as possible in order to be
+    able to re-distribute the codebase.
+
+INSTALLATION
+    Installation documentation has been provided in POD format and is
+    available as:
+
+        perldoc docs/INSTALL.pod
+
+TODO
+    Please see the file docs/TODO.txt
+
+BUGS
+    All known bugs should be visable in our bug tracker:
+
+        https://developer.berlios.de/bugs/?group_id=5359
+
+    However, a few important ones to point out that you should be aware
+    of...
+
+    * Installing to a subdirectory
+        Installation to a subdirectory of a site has not been fully tested,
+        but should work. Eg. installing to
+        http://your.domain.com/some/dir/pdnso/
+
+        Please let us know if you have either success or failure with this.
+
+    * url_redirect.d dies randomly
+        url_redirect.d - This dies every once in a while. I haven't been
+        able to determine what the cause is. Sometimes it'll run for months
+        without an issue, othertimes just a few days. My guess is, someone
+        is throwing some really nasty data at it, and it's not coping with
+        that very well.
+
+AUTHOR
+    Joshua I. Miller <unrtst@cpan.org>
+
+COPYRIGHT NOTES
+    The gereral design / color scheme / css used on this site has been used
+    elsewhere. It is an open source design, obtained at:
+
+        http://www.oswd.com
+
+    I can no longer find the original on that site, and it had no copyright
+    notice included.
+
+    html/tablesort.js is Copyright (c) 1998 - 2002 Erik Arvidsson. Please
+    see the notice within that script for further information.
+
+COPYRIGHT AND LICENSE
+    tablesort.js is Copyright (c) 1998 - 2002 Erik Arvidsson
+
+    Copyright (c) 2002 by PurifiedData, LLC.
+
+    This library is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License version 2 as published
+    by the Free Software Foundation. (see COPYING)
+
+    This program is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+    Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
+

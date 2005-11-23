@@ -1,0 +1,25 @@
+<BR>
+
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<TR>
+	<TH BGCOLOR=#7d9fc4><FONT COLOR=#FFFFFF>Delete Domain</FONT></TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>
+Are you sure you want to delete the domain <B><TMPL_VAR NAME=DOMAIN></B> from our server?<BR>
+<A HREF="<TMPL_VAR NAME=YES>">Yes</A> | <A HREF="<TMPL_VAR NAME=NO>">No</A><BR>
+	</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>
+Clicking yes will scheduale this domain for deletion from our system. Domains schedualed for deletion will be cleaned up at 4am, noon, and 8pm EST daily. The following e-mail addresses will be e-mailed a backup copy of their domain config if you choose to delete this domain:<UL><TMPL_LOOP LOGIN_EMAIL>
+	<LI><TMPL_VAR NAME=EMAIL></TMPL_LOOP>
+	</UL>
+	</TD>
+</TR>
+</TABLE>
+</TD></TR>
+</TABLE>
+

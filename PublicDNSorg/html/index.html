@@ -1,0 +1,114 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/index.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+index.html - Public-DNS.org index page, and generic static page enabler (using ?section=section_name).
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+my $root_uri    = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri       =~ s/\/+$//; # remove trailing slash
+my $system_name = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+#   if ($status <= 0)
+#   {
+#       &print_top(0);
+#       &print_error("Not Logged In.");
+#       return;
+#   }
+
+    if ($Q::section && (-r $tmpl_dir . "/$Q::section.tmpl"))
+    {
+        &default($uid,$Q::section);
+    } else {
+        &default($uid,"intro");
+    }
+}
+
+
+sub default
+{
+    my $uid = shift;
+    my $section = shift;
+    &print_top($uid,$thisscript,$section);
+
+    # NOTE: we're disabling die_on_bad_params, so we can pass some
+    # generic stuff to all templates, even if they don't need them
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/$section.tmpl",
+                                   cache => 1,
+                                   die_on_bad_params => 0);
+    $tmpl->param(SYSTEM_NAME => $system_name);
+    $tmpl->param(ROOT_URI => $root_uri);
+    if ($section eq 'intro')
+    {
+        my @tlds;
+        my $gettlds = IteratedSQLSelect("TLD","tlds","","ORDER BY orderid,TLD");
+        while (my ($tld) = $gettlds->fetchrow_array)
+        {
+            push(@tlds,{ TLD => $tld });
+        }
+        $gettlds->finish;
+        $tmpl->param(TLDS => \@tlds);
+    }
+    print $tmpl->output;
+
+    &print_bottom;
+}
+

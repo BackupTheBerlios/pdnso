@@ -1,0 +1,47 @@
+<BR>
+<B>Logs of updates and modifications to your domains</B><BR>
+<BR>
+<FORM METHOD=post action=changelog.html>
+<INPUT TYPE=hidden name=action value=sh_changelog>
+Show all logs for domain: <SELECT name=domain>
+	<TMPL_LOOP DOMAINS>
+	<OPTION><TMPL_VAR NAME=DOMAIN></OPTION>
+	</TMPL_LOOP>
+	</SELECT>
+<INPUT TYPE=submit>
+</FORM>
+
+<TMPL_IF ERROR><BR><BR><B><TMPL_VAR NAME=ERROR></TMPL_IF>
+
+<TMPL_IF RESULTS>
+<TABLE CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+	<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+	<TR>
+		<TH BGCOLOR=#98c2f0>User</TH>
+		<TH BGCOLOR=#98c2f0>IP</TH>
+		<TH BGCOLOR=#98c2f0>Domain</TH>
+		<TH BGCOLOR=#98c2f0>Action</TH>
+		<TH BGCOLOR=#98c2f0>Old&nbsp;Values</TH>
+		<TH BGCOLOR=#98c2f0>New&nbsp;Values</TH>
+		<TH BGCOLOR=#98c2f0>Date</TH>
+	</TR>
+
+	<TMPL_LOOP RESULTS>
+	<TR>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=LOGIN></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=IP></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=DOMAIN></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=ACTION></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=OLD></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=NEW></TD>
+		<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=DATE></TD>
+	</TR>
+	</TMPL_LOOP>
+
+	</TABLE>
+</TD></TR>
+</TABLE>
+</TMPL_IF>
+
+<BR><BR>

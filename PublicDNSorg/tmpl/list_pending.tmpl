@@ -1,0 +1,80 @@
+<BR>
+
+<script type="text/javascript" src="tablesort.js"></script>
+
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+<TABLE onClick="sortColumn(event)" CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<thead>
+<TR>
+	<TH BGCOLOR=#7d9fc4 COLSPAN=6><FONT COLOR=#FFFFFF>Pending Domain Additions</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 ALIGN=right COLSPAN=6>(click on column headers to sort)</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Domain</B></TD>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Status</B></TD>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Added to queue</B></TD>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Last time checked</B></TD>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Last time notification sent</B></TD>
+	<TD BGCOLOR=#98c2f0 ALIGN=center><B>Delete from queue</B></TD>
+</TR>
+</thead>
+
+<tbody>
+<TMPL_LOOP DOMAINS>
+<TR>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=DOMAIN></TD>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=STATUS></TD>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=ADDED></TD>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=CHECKED></TD>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=NOTIFIED></TD>
+	<TD BGCOLOR=#d0e1f5 ALIGN=center><A class=sidelink HREF="<TMPL_VAR NAME=DELETE>">Delete</A></TD>
+</TR>
+</TMPL_LOOP>
+</tbody>
+
+</TABLE>
+</TD></TR>
+</TABLE>
+<BR>
+
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=75%>
+<TR><TD>
+<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<TR>
+	<TH BGCOLOR=#7d9fc4 COLSPAN=2><FONT COLOR=#FFFFFF>Key</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Status: Pending Check</TD>
+	<TD BGCOLOR=#d0e1f5>Domain has been added to Pending Domains, but no attempt has been made to verify that it is pointed at our name servers yet.</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Status: Check failed</TD>
+	<TD BGCOLOR=#d0e1f5>Automated tests on this domain have been run, and found that the domain has not been pointed to our name servers yet (<TMPL_LOOP NAME=DNS_SERVERS><TMPL_VAR NAME=FQDN>,</TMPL_LOOP>)</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Status: Verified</TD>
+	<TD BGCOLOR=#d0e1f5>Domain has been verified, and added to our service. You may begin editing your records at any time.</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Added to queue</TD>
+	<TD BGCOLOR=#d0e1f5>Date and time domain add request was made.</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Last time checked</TD>
+	<TD BGCOLOR=#d0e1f5>Date and time the last automated check was made to determine if the domain has been setup correctly.</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Last time notification sent</TD>
+	<TD BGCOLOR=#d0e1f5>Date and time the last e-mail notification was sent to your address.</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5>Delete from queue</TD>
+	<TD BGCOLOR=#d0e1f5>Removes the domain add request from the pending queue.</TD>
+</TR>
+</TABLE>
+</TD></TR>
+</TABLE>
+<BR>

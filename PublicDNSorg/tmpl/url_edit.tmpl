@@ -1,0 +1,54 @@
+<BR>
+
+<FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>">
+<INPUT TYPE=hidden name=action value=url_edit>
+<INPUT TYPE=hidden name=urid value="<TMPL_VAR NAME=URID>">
+<INPUT TYPE=hidden name=Cid value="<TMPL_VAR NAME=CID>">
+
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<TR>
+	<TH BGCOLOR=#7d9fc4 COLSPAN=6><FONT COLOR=#FFFFFF>Edit Record Forwarder</FONT></TH>
+</TR>
+<TR>
+	<TH BGCOLOR=#98c2f0 COLSPAN=2>Action</TH>
+	<TH BGCOLOR=#98c2f0>Record URL</TH>
+	<TH BGCOLOR=#98c2f0>Forward To URL</TH>
+	<TH BGCOLOR=#98c2f0>URL Cloaking</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><INPUT TYPE=submit value=Modify></TD>
+	<TD BGCOLOR=#d0e1f5 ALIGN=CENTER><A class=sidelink HREF="<TMPL_VAR NAME=CANCEL>">Cancel</A></TD>
+	<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=URL></TD>
+	<TD BGCOLOR=#d0e1f5><SELECT name=secure>
+		<TMPL_IF SECURE><OPTION VALUE=1>https://
+		<TMPL_ELSE><OPTION VALUE=0>http://
+		</TMPL_IF>
+		<OPTION VALUE=0>http://</OPTION><OPTION VALUE=1>https://</OPTION></SELECT><INPUT TYPE=text name=forwardto value="<TMPL_VAR NAME=FORWARDTO>" maxlength=255></TD>
+	<TD BGCOLOR=#d0e1f5><INPUT TYPE=checkbox name=cloak value=1 <TMPL_IF CLOAK>CHECKED</TMPL_IF> ></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>(optional) Page to redirect to:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=2><INPUT TYPE=text name=page maxlength=255 size=30 value="<TMPL_VAR NAME=PAGE>"></TD>
+</TR>
+<TR>
+	<TH BGCOLOR=#d0e1f5 COLSPAN=5>Cloak Settings (optional):</TH>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Page Title:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=2><INPUT TYPE=text name=title maxlength=255 size=30 value="<TMPL_VAR NAME=TITLE>"></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Meta tag keywords:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=2><INPUT TYPE=text name=keywords maxlength=255 size=30 value="<TMPL_VAR NAME=KEYWORDS>"></TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#98c2f0 COLSPAN=3>Meta tag description:</TD>
+	<TD BGCOLOR=#d0e1f5 COLSPAN=2><INPUT TYPE=text name=description maxlength=255 size=30 value="<TMPL_VAR NAME=DESCRIPTION>"></TD>
+</TR>
+</TABLE>
+</TD></TR>
+</TABLE>
+</FORM>
+

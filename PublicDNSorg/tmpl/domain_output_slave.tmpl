@@ -1,0 +1,25 @@
+
+<BR>
+
+<TABLE BORDER=0 CELLSPACING=0 CELLPADDING=0 WIDTH=100% BGCOLOR=#000000>
+<TR><TD>
+<table border="0" cellspacing="1" cellpadding="0" width="100%">
+	<TR>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=2><TMPL_IF MODIFIED><FONT SIZE=-1 COLOR=#FFFFFF><I>[modified]</I></FONT></TMPL_IF></TH>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=3><FONT COLOR=#FFFFFF><TMPL_VAR NAME=DOMAIN></FONT></TH>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=2><A class=tableheadlink HREF="<TMPL_VAR NAME=DOMAIN_DELETE>">Delete</A></TH>
+	</TR>
+
+	<FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>">
+	<INPUT TYPE=hidden name=action value=master_edit>
+	<INPUT TYPE=hidden name=Cid value="<TMPL_VAR NAME=CID>">
+	<TR>
+		<TD BGCOLOR=#d0e1f5 COLSPAN=6><BR><TMPL_VAR NAME=DOMAIN> is configured as a secondary, and retrieves it's configuration information from:
+		<BLOCKQUOTE>
+		<INPUT TYPE=text size=35 maxlength=255 name=master value="<TMPL_VAR NAME=MASTER>"><INPUT TYPE=submit value="Update Master Definition"></BLOCKQUOTE><BR><BR>
+		</TD>
+	</TR>
+	</FORM>
+</TABLE>
+</TD></TR>
+</TABLE>

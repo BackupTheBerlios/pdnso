@@ -1,0 +1,20 @@
+<BR>
+
+<FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>">
+<TABLE  CELLPADDING=0 CELLSPACING=0 BORDER=0 BGCOLOR=#000000 WIDTH=100%>
+<TR><TD>
+<TABLE CELLPADDING=0 CELLSPACING=1 BORDER=0 WIDTH=100%>
+<TR>
+	<TD BGCOLOR=#d0e1f5>
+<INPUT TYPE=hidden name=action value=domain_add_slave>
+<INPUT TYPE=hidden name=zone value="<TMPL_VAR NAME=ZONE>">
+<INPUT TYPE=hidden name=tld value="<TMPL_VAR NAME=TLD>">
+Zone Submitted: <TMPL_VAR NAME=ZONE>.<TMPL_VAR NAME=TLD><BR>
+IP of master domain server to pull config from:<INPUT TYPE=text name=master><INPUT TYPE=submit value="Add Domain">
+	</TD>
+</TR>
+</TABLE>
+</TD></TR>
+</TABLE>
+
+</FORM>

@@ -1,0 +1,611 @@
+=head1 INSTALLATION DOCUMENTATION
+
+Hi, and welcome to the Public-DNS.org DNS management system.
+
+This document will attempt to explain how to set everything up.
+Considering the level of integration with the system required, it's really
+not that much to configure... but it's not for the faint of heart either.
+
+This document is devided into a couple distinct sections.
+
+=over
+
+=item * L</"Download a release">
+
+=item * L</"Initialize of the database.">
+
+=item * L</"Installation of the web frontend.">
+
+=item * L</"CONFIGURATION">
+
+=over
+
+=item * L</"Configuration of the web frontend.">
+
+=item * L</"Configuration of the master daemon.">
+
+=item * L</"Configuration of the slave daemon.">
+
+=back
+
+=item * L</"Installation/Configuration of the background processes.">
+
+=item * L</"Preparation of your nameserver.">
+
+=item * L</"Installation of the daemons.">
+
+=item * L</"Use the system">
+
+=item * L</"GOTCHAS">
+
+=back
+
+If you run into any problems along the way, jump to the L</"GOTCHAS"> section!
+
+=head1 Conventions used in this document
+
+For the sake of these examples, the following will be used. You can adjust them to whatever you feel is appropriate for your site.
+
+    Database Sofatware : MySQL
+    Database User : pdns
+    Database Pass : pswd
+    Database Host : localhost
+    Database Name : PDNS
+    
+    Public-DNS.org software base directory : /usr/local/PublicDNSorg
+	Webserver IP : 192.168.0.1
+	Website URL  : http://www.your.domain.com/
+
+=head1 Download a release
+
+Releases are available through BerliOS though tar.gz files, or direct cvs access. Please see:
+
+=over
+
+=item L<http://developer.berlios.de/projects/pdnso/>
+
+=back
+
+Make a temporary directory on your system somewhere, and extract the Public-DNS.org sources to that location:
+
+=over
+
+=item * Using a .tar.gz file
+
+    tar -zxvf /path/to/pdns-X.nnn.tar.gz /path/to/temp/direcotory
+
+=item * Using cvs
+
+    cvs -d:pserver:anonymous@cvs.pdnso.berlios.de:/cvsroot/pdnso login
+       [hit enter when prompted for password]
+    cvs -z3 -d:pserver:anonymous@cvs.pdnso.berlios.de:/cvsroot/pdnso co -d /path/to/temp/directory pdnso
+
+=back
+
+Move the distribution into place:
+
+    mkdir /usr/local/PublicDNSorg
+    mv /path/to/temp/directory/* /usr/local/PublicDNSorg/
+
+=head1 Initialize of the database.
+
+Follow these steps to prep the database
+
+=over
+
+=item * Add a database
+
+    mysqladmin -u root -p -h localhost create PDNS
+
+=item * Add a user and permissions
+
+    echo "INSERT INTO user (Host, User, Password) VALUES ('%', 'pdns', PASSWORD('pswd'));" | mysql -u root -p -h localhost mysql
+    echo "INSERT INTO db VALUES ('%', 'PDNS', 'pdns', 'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y');
+
+=item * Reload grant tables:
+
+    mysqladmin -u root -p -h localhost reload
+
+=item * Create the tables
+
+    cd /uar/local/PublicDNSorg
+    cat sql/dns_db_mysql.ddl | mysql -u pdns -p -h localhost PDNS
+
+=item * Add the default data to the tables
+
+    cd /uar/local/PublicDNSorg
+    cat sql/populate* | mysql -u pdns -p -h localhost PDNS
+
+=back
+
+=head1 Installation of the web frontend.
+
+NOTE: Some knowledge of how to configure your web server is assumed. The instructions below provide only the basics for apache 1.3.x, but should be adaptable to other environments.
+
+The following three directories are needed by the web frontend:
+
+    lib/
+    html/
+    tmpl/
+
+Both B<lib/> and B<tmpl/> should be outside of the web root (requests to the web server should not be able to access these directories).
+
+Everything under B<html/> should be web-accessable. All files ending in ".html" are actually perl scripts, and should be configured as such in your web server software.
+
+The web server should also define the environment variable PERL5LIB to point to wherever you install the B<lib/> directory.
+
+Example:
+
+    mkdir /usr/local/PublicDNSorg
+    cp -r lib html tmpl /usr/local/PublicDNSorg/
+
+A sample virtual host config for apache has been provided below (one for mod_perl, and one for a cgi environment).
+
+B<NOTE: Though we highly recommend running under mod_perl for production use,>
+B<we recommend using the cgi-script config while configuring the system>
+B<(it cuts down on the number of times you may need to restart the web server due to mod_perl caching compiled libraries).>
+
+Either way, you will likely have to tailor it to suit your environment.
+
+=over
+
+=item * Mod Perl Config Example
+
+  <VirtualHost 192.168.0.1>
+    DocumentRoot /usr/local/PublicDNSorg/html
+    ServerName www.your.domain.com
+    <Directory "/usr/local/PublicDNSorg/html">
+      AllowOverride All
+      SetEnv PERL5LIB /usr/local/PublicDNSorg/lib
+      ### MOD_PERL
+      <IfModule mod_perl.c>
+        # files ending in .pl or .html are mod_perl'd
+        <Files ~ "\.(html|pl)$">
+          SetHandler perl-script
+          PerlHandler Apache::Registry
+          Options +ExecCGI
+          PerlSendHeader On
+          PerlSetEnv PERL5LIB /usr/local/PublicDNSorg/lib
+        </Files>
+      </IfModule>
+    </Directory>
+  </VirtualHost>
+
+=item * Standard Cgi Config Example
+
+  <VirtualHost 192.168.0.1>
+    DocumentRoot /usr/local/PublicDNSorg/html
+    ServerName www.your.domain.com
+    <Directory "/usr/local/PublicDNSorg/html">
+      AllowOverride All
+      SetEnv PERL5LIB /usr/local/PublicDNSorg/lib
+      ### STANDARD CGI
+      # files ending in .pl or .html are cgi's
+      <Files ~ "\.(html|pl)$">
+        SetHandler cgi-script
+        Options +ExecCGI
+      </Files>
+    </Directory>
+  </VirtualHost>
+
+=back
+
+=head1 CONFIGURATION
+
+=head2 Configuration of the web frontend.
+
+=head3 Edit lib/PublicDNSorg/Config.ini
+
+I<NOTE: We recommend you backup the existing config for reference later, just in case.>
+
+The file B<lib/PublicDNSorg/Config.ini> contains the configuration for the entire system.
+
+It is commented fairly well, and provides some reasonable default and examples.
+Please edit it to match your sites setup.
+
+The following sections are needed to get the web frontend running:
+
+=over
+
+=item * [db_connection]
+
+=item * [system]
+
+=item * [page]
+
+=back
+
+B<NOTE>: The entire config is used by the web frontend, so it will not be fully configured until the full Config.ini is updated. Filling in the above settings will, however, allow you to finally start looking at the fruits of your labors.
+
+If all has gone well, you should now be able to access the site through your browser.
+
+    http://www.your.domain.com/
+
+If it doesn't look right, or something breaks, check your logs and fix the problem. Also, you might want to check the L</"GOTCHAS"> section.
+
+If all seems to be ok, finish up editing the config file.
+
+=head3 Page updates
+
+The following pages will need updated by you. They are site specific,
+and as such, are not distributed with the software distribution.
+(Nearly) blank placeholders have been provided.
+
+=over
+
+=item * tmpl/warranty.tmpl
+
+Warranty and Disclaimer
+
+=item * tmpl/privacypolicy.tmpl
+
+Statement of privacy policy
+
+=item * tmpl/domaindisputes.tmpl
+
+Domain dispute policy
+
+=item * tmpl/spam.tmpl
+
+UCE / UBE / Spam policy
+
+=item * tmpl/status.tmpl
+
+Service status page (a template has been provided).
+
+=back
+
+Please see http://www.Public-DNS.org for examples.
+
+=head3 The B<html/admin/> directory
+
+The html/admin/ directory contains a user, and a banner administration page.
+
+These pages do NOT have any authentication built in. This is a feature, so 
+that you can use the user admin page, and blow away even your own user, and 
+still be able to access the page.
+
+We recommend protecting this directory by means of your web servers 
+authentication directives (eg. .htaccess files).
+
+Here is an example of .htaccess file contents (put it in the 
+html/admin/ directory):
+
+	AuthUserFile /usr/local/PublicDNSorg/htpasswd
+	AuthGroupFile /dev/null
+	AuthName "Public-DNS.org DNS Management System"
+	AuthType Basic
+	require valid-user
+
+NOTE: if you use a .htaccess file, make sure to add users to the password file it references via the L<htpasswd(1)> command.
+
+NOTE: you should store your htpasswd file in a directory that is NOT
+web-accessable. It can live anywhere on the system... the base directory
+of the public-dns.org install (as in the example) would be fine.
+
+See also: web server documentation, and the L<htpasswd(1)> man page.
+
+=head2 Configuration of the master daemon.
+
+This is also configured through the provided B<lib/PublicDNS/Config.ini> file.
+
+The master daemon is a script that needs run on your primary DNS server (L</"note">). It listens for incoming connections on an IP socket. The web frontend, as well as various cron job scripts, connect to it, and tell it what to do.
+
+It plays the role of interfacing with the actual name server, as well as keeping all the slave name servers in sync.
+
+It currently only support ISC BIND (L<http://www.isc.org/sw/bind/>), but it (and the slave daemon) are the only pieces that would need re-written to enable support for other name servers.
+
+=over
+
+=item note
+
+I<configured properly, it could run on any server that has write access to config files used by the DNS server.>
+
+=back
+
+The only B<lib/PublicDNS/Config.ini> sections the master daemon accesses are:
+
+=over
+
+=item * [daemon]
+
+(only uses the passphrase indirectly through L<PublicDNS::CryptWrapper|PublicDNS::CryptWrapper.pm>)
+
+=item * [daemon_master]
+
+=item * [dns]
+
+=back
+
+=head3 Quick note on the B<slave_0_addr> settings
+
+A quick note on the B<slave_0_addr> type settings in the B<[daemon_master]> section...
+
+If you don't have any slave servers, or don't want to set any up in the begining, just leave this commented out, and skip the next section on L</"Configuration of the slave daemon.">
+
+If you do have them, you'll need to add two entries for each slave. It's done in a slightly quirky way. The config varable contains a digit, and for each slave, you should increment that digit by one. The "port" defaults to 5202, so you can even leave that out if you like. Eg.
+
+    slave_0_addr=ns2.your.domain.com
+    slave_0_port=5202
+    slave_1_addr=ns3.your.domain.com
+    slave_1_port=5202
+
+=head2 Configuration of the slave daemon.
+
+This is also configured through the provided B<lib/PublicDNS/Config.ini> file.
+
+The only real difference in treatment for the slaves is that, if you have more than one slave, you will need to write a separate B<lib/PublicDNS/Config.ini> for each one.
+
+That also means you'll need to install the Public-DNS.org libraries on each slave (they can't share an install over NFS). This really isn't much of a problem... just something worth noting from the get go.
+
+Anyway, it get's configured like everything else.
+
+The only B<lib/PublicDNS/Config.ini> sections the master daemon accesses are:
+
+=over
+
+=item * [daemon]
+
+(only uses the passphrase indirectly through L<PublicDNS::CryptWrapper|PublicDNS::CryptWrapper.pm>)
+
+=item * [daemon_slave]
+
+=item * [dns]
+
+=back
+
+=head1 Installation/Configuration of the background processes.
+
+Various processes need to run on a regular basis to keep the system going. For example, processing the pending domains queue, or cleansing the system of deleted zones.
+
+These all live in the B<utils/> directory of the distribution. Each contains some brief POD documentation which can be viewed by running:
+
+    perldoc utils/filename_here
+
+They also depend on the config file (B<lib/PublicDNS/Config.ini>) to function.
+
+=head2 Test the cron scripts
+
+It is recommended that you test each of the scripts listed in B<utils/dns_crontab> prior to adding them to the system jobs scheduler (cron).
+
+Because they require the Public-DNS.org libraries, you must setup your environment so perl knows where to find our libraries.
+
+=over
+
+=item Under an sh / bash shell
+
+    export PERL5LIB=/usr/local/PublicDNS/lib
+
+=item Under csh
+
+    setenv PERL5LIB /usr/local/PublicDNS/lib
+
+=back
+
+Now you can run them from the command line. Most of them don't take any options, and don't output anything (though they may send e-mail to the admin account (configured in the ini)).
+
+C<send_backups.cron> and C<find_lame_domains.cron> both take options.
+
+To run them, just:
+
+    perl utils/update_zones.cron
+
+=over
+
+=item C<send_backups.cron>
+
+takes one option of either "weekly" or "monthly", signifying whether it should send out weekly or monthly backups.
+
+=item C<find_lame_domains.cron>
+
+identifies all domains in our database, which no longer have us listed as their DNS providers in the root name servers. Its options control what action it takes on them.
+
+    -r remove lame zones
+    -R also remove lame zones without any name servers
+    -d debug mode
+    -v verbose mode
+
+=back
+
+For the others, please see their individual POD documentation.
+
+=head2 Add cron scripts to the scheduler (cron)
+
+They'll need added to your system job scheduler. We use the L<cron(8)> daemon, but you can use whatever.
+
+A sample L<crontab(5)> has been provided at B<utils/dns_crontab>. Edit that file, setting the options to what they should be, then add then entries to your crontab.
+
+Whose crontab you add these to, depends on how your system is configured. They may even need added to the root crontab.
+
+To load them:
+
+=over
+
+=item Edit and paste them in
+
+    crontab -e -u [crontab target user]
+
+=item Or, load the whole thing
+
+    crontab -u [crontab target user] < utils/dns_crontab
+
+=back
+
+=head1 Preparation of your nameserver.
+
+The following examples are going to assume you're running ISC BIND (L<http://www.isc.org/sw/bind/>) in a chroot'ed jail. If you're not, just ignore the sandbox path from each example.
+
+For this example, we're assuming:
+
+=over
+
+=item * named sandbox root is /etc/named/sand
+
+=item * bind "directory" option is "/etc/namedb"
+
+This means, the full zonefile path would be "/etc/named/sand/etc/namedb/myzones/db.some.domain.com" if a named.conf zone entry has the following "file" spec defined:
+
+    file "myzones/db.some.domain.com";
+
+=item * The user the daemons are running as be a member of the DNSGROUP group.
+
+=item * The following is in your B<lib/PublicDNS/Config.ini> file.
+
+I<(note: options we don't care about aren't listed below)>
+
+    [dns]
+    zonefile_fullpath=/etc/namedb/sand/etc/namedb/pdns_zonefiles
+    zonefile_bindpath=publicdns
+    configfilemain_fullpath=/etc/namedb/sand/etc/named.conf
+    configfileinc_fullpath=/etc/namedb/sand/etc/named.conf.pdns
+    includedir_fullpath=/etc/namedb/sand/etc/namedb/pdns_conf_includes
+    includedir_bindpath=/etc/namedb/pdns_conf_includes
+    [daemon_slave]
+    named_conf_includefile=/etc/namedb/sand/etc/named.conf.pdns
+
+=back
+
+On the primary name server (you'll probably have to be root for this):
+
+    echo 'include "/etc/named.conf.pdnds";' >> /etc/named/sand/etc/named.conf
+    touch /etc/named/sand/etc/named.conf.pdns
+    mkdir /etc/named/sand/etc/namedb/pdns_conf_includes
+    mkdir /etc/named/sand/etc/namedb/pdns_zonefiles
+    chgrp DNSGROUP /etc/named/sand/etc/named.conf.pdns
+    chgrp DNSGROUP /etc/named/sand/etc/namedb/pdns_conf_includes
+    chgrp DNSGROUP /etc/named/sand/etc/namedb/pdns_zonefiles
+    chmod 664 /etc/named/sand/etc/named.conf.pdns
+    chmod 2775 /etc/named/sand/etc/namedb/pdns_conf_includes
+    chmod 2775 /etc/named/sand/etc/namedb/pdns_zonefiles
+
+On each slave name server (you'll probably have to be root for this):
+
+    echo 'include "/etc/named.conf.pdnds";' >> /etc/named/sand/etc/named.conf
+    touch /etc/named/sand/etc/named.conf.pdns
+    mkdir /etc/named/sand/etc/namedb/pdns_zonefiles
+    chgrp DNSGROUP /etc/named/sand/etc/named.conf.pdns
+    chgrp DNSGROUP /etc/named/sand/etc/namedb/pdns_zonefiles
+    chmod 664 /etc/named/sand/etc/named.conf.pdns
+    chmod 2775 /etc/named/sand/etc/namedb/pdns_zonefiles
+
+I<(TODO: sorry, this documentation could probably be better.)>
+
+The name servers should now be prepred for the final step.
+
+=head1 Installation of the daemons.
+
+The following assumes a B<lib/PublicDNS/Config.ini> setup of:
+
+    [daemon_master]
+    uid=501
+    gid=501
+    pidfile=/var/run/pdsysd.pl.pid
+    logpath=/var/log/pdsysd.log
+    [daemon_slave]
+    uid=501
+    gid=501
+    pidfile=/var/run/pdsysd_slaves.pl.pid
+    logpath=/var/log/pddnsd.log
+
+
+The daemons will need started when the system starts. We've included some example init scripts (B<daemons/pdsysd.sh> and B<daemons/pdsysd_slaves.sh>). Feel free to tweak them to suit your OS. Getting them to run when the system starts is left up as an excersize to the user (too many OS differences to cover here).
+
+=over
+
+=item NOTE: The init scripts MUST set the PERL5LIB environment correctly (eg. /usr/local/PublicDNS/lib)
+
+=back
+
+The daemons will need started as root, but they will effectively be running as another user (similar to how apache is started by root, but runs as "nobody" or "httpd").
+
+So, add a user for them. (doing this is different on every system... you can use a GUI, or /usr/sbin/adduser, or vipw, etc... we're going to assume you can add a user).
+
+We're assuming the uid is "501" (as noted in the config snippet above).
+
+We're also going to assume you have a group in /etc/group called "DNSGROUP" with a gid of "501".
+
+Make sure the rest of the config matches how your dns server is setup (see L<previous section|/"Preparation of your nameserver.">).
+
+Create the logfiles and pidfiles on the primary master server:
+
+    touch /var/run/pdsysd.pl.pid
+    touch /var/log/pdsysd.log
+    chown 501:501 /var/run/pdsysd.pl.pid
+    chown 501:501 /var/log/pdsysd.log
+    chmod 660 /var/run/pdsysd.pl.pid
+    chmod 660 /var/log/pdsysd.log
+
+Create the logfiles and pidfiles on the each of the slave servers:
+
+    touch /var/run/pdsysd_slaves.pl.pid
+    touch /var/log/pdsysd.log
+    chown 501:501 /var/run/pdsysd_slaves.pl.pid
+    chown 501:501 /var/log/pdsysd.log
+    chmod 660 /var/run/pdsysd_slaves.pl.pid
+    chmod 660 /var/log/pdsysd.log
+
+=head2 Test the daemons
+
+You can test the daemons by running them by hand. If they error you, you should get some semi-informitive message as to what the problem is.
+
+On the master:
+
+    export PERL5LIB=/usr/local/PublicDNS/lib
+    perl daemons/pdsysd.pl
+
+On each the slaves:
+
+    export PERL5LIB=/usr/local/PublicDNS/lib
+    perl daemons/pdsysd_slaves.pl
+
+=head2 Starting them as a service
+
+If the test worked (you did test, right?), start them up with your init script:
+
+On the master:
+
+    sh /usr/local/PublicDNS/daemons/pdsysd.sh start
+
+On each of the slaves:
+
+    sh /usr/local/PublicDNS/daemons/pdsysd_slaves.sh start
+
+=head1 Use the system
+
+You should now be able to start using the system.
+
+=head2 Add an admin account
+
+You'll want to add an admin user to the system. We currently don't have a way to do this, besides manually. Admin users can see and edit all domains. To add one:
+
+    USERNAME="whatever_you_want"
+    export PERL5LIB=/usr/local/PublicDNS/lib
+    perl utils/adduser.pl $USERNAME [password]
+    echo "UPDATE logins SET loginclass = 'admin' WHERE login = '$USERNAME'" | mysql -u [mysqluser] -p -h [mysqlhost] [dns_dbname]
+
+I<(TODO: sorry, this will be easier in the next version.)>
+
+=head2 Add domains and such
+
+You can now go to your web site, and start adding domains and such. See the built in help documenation on the site for more info.
+
+Also, the document B<html/process.htm> may be helpful in understanding the workflow of the system.
+
+=head1 GOTCHAS
+
+The following are some issues that tend to happen often enough that they deserve their own section. They're ususally come in the form of annoying little quirky problems, that are also difficult to track down the source.
+
+=head2 cookie_domain
+
+If you can log in, but the next time you hit a link, you're logged out, it's because cookies aren't working correctly.
+
+It could be that your browser is acting up and needs restarted, or the cookie cache needs cleared, or you're browser isn't configured to accept cookies. If it's none of those, then it's probably the B<cookie_domain> setting in the B<lib/PublicDNS/Config.ini> file.
+
+Make sure that domain is the same one the site is living on. It should be sans http://, and no directory setting either (eg. www.Public-DNS.org).
+
+If you're getting to your site through an http redirect, make sure it matches the final destination (eg. if Public-DNS.org redirects to www.Public-DNS.org, and our cookie_domain is set to "www.Public-DNS.org").
+
+=head2 Restarting the web server
+
+If you are running under mod_perl, and something isn't working right, don't hesitate to restart the web server. For example, if you update the config file, all libraries and scripts I<should> automatically load the new config... but it does not seem like they did, for whatever reason, by all means, just restart the web server. I don't know why it is, but I've waisted a TON of time trying to track down various problems, only to find a web server restart is all it needed.
+

@@ -1,0 +1,14 @@
+This is an automated message to inform you of changes that have been made
+to a domain which has your email address as it's registered contact.
+
+The zone <TMPL_VAR NAME=DOMAIN> has been scheduled for removal from our dns servers at
+<TMPL_VAR NAME=SYSTEM_NAME>
+For more information on our services, please see:
+    <TMPL_VAR NAME=ROOT_URI>
+
+Below is a complete dump of the zone data for <TMPL_VAR NAME=DOMAIN>
+----------------------------------------------<TMPL_VAR NAME=DASHES>
+<TMPL_IF MASTER>Secondary DNS Configuration only.
+Master was configured as <TMPL_VAR NAME=MASTER>
+<TMPL_ELSE><TMPL_VAR NAME=DOMAINDATA>
+</TMPL_IF>

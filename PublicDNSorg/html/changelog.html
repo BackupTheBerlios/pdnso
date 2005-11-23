@@ -1,0 +1,179 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/changelog.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:30 $
+# $Author: unrtst $
+
+=head1 NAME
+
+changelog.html - Public-DNS.org changelog frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid,$loginclass) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+    if ($status <= 0)
+    {
+        &print_top(0);
+        &print_error("Not Logged In.");
+        return;
+    }
+
+    &default($uid,$loginclass);
+}
+
+
+sub default
+{
+    my $uid = shift;
+    my $loginclass = shift;
+
+    &print_top($uid,$thisscript,'view changelog');
+
+    my ($ownerid,$login) = SQLSelect('ownerid,login','logins',"uid = $uid");
+
+    my $s_where;
+    unless ($loginclass eq 'admin')
+    {
+        $s_where = "ownerid = $ownerid";
+    }
+
+    my %domains;
+    my $get_log_domains = IteratedSQLSelect('zone,tld','log',$s_where);
+    while (my ($zone,$tld) = $get_log_domains->fetchrow_array)
+    {
+        $domains{"$zone.$tld"}++;
+    }
+    $get_log_domains->finish;
+    my $get_conf_domains = IteratedSQLSelect('zone,tld','conf',$s_where);
+    while (my ($zone,$tld) = $get_conf_domains->fetchrow_array)
+    {
+        $domains{"$zone.$tld"}++;
+    }
+    $get_conf_domains->finish;
+
+    my @domains;
+    push(@domains,{DOMAIN => "All"} );
+    foreach my $domain (sort keys %domains)
+    {
+        push(@domains,{ DOMAIN => $domain } );
+    }
+
+    # get changelog template
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/log.tmpl", cache => 1);
+    $tmpl->param(DOMAINS => \@domains);
+
+    if ($Q::action eq "sh_changelog")
+    {
+        if ($Q::domain && ($Q::domain ne "All") )
+        {
+            $Q::domain =~ /(\S+)\.([^\s\.]+)$/;
+            my $zone = $1;
+            my $tld = $2;
+            my ($q_zone,$q_tld) = SQLQuote($zone,$tld);
+            my ($conf_ownerid) = SQLSelect('ownerid','conf',"zone = $q_zone AND tld = $q_tld");
+            my ($conf2_ownerid) = SQLSelect('distinct(ownerid)','log',"zone = $q_zone AND tld = $q_tld");
+
+            # verify domain searched for belongs to user, or it's the admin
+            if ( ($loginclass eq 'admin') || ($ownerid == $conf_ownerid) || ($ownerid == $conf2_ownerid) )
+            {
+                my @results;
+                my $s_where2;
+                $s_where2 = $s_where . " AND " if $s_where;
+                my $get_results = IteratedSQLSelect("login,action,zone,tld,remote_ip,oldvalues,newvalues,DATE_FORMAT(timestamp,'\%m-\%d-\%Y \%r')","log","$s_where2 zone = $q_zone AND tld = $q_tld","ORDER BY timestamp DESC");
+                while (my ($l_login,$l_action,$l_zone,$l_tld,$l_ip,$l_oldvalues,$l_newvalues,$l_timestamp) = $get_results->fetchrow_array)
+                {
+                    push(@results,{
+                        LOGIN   => $l_login,
+                        IP      => $l_ip,
+                        DOMAIN  => $l_zone . "." . $l_tld,
+                        ACTION  => $l_action,
+                        OLD     => $l_oldvalues,
+                        NEW     => $l_newvalues,
+                        DATE    => $l_timestamp }
+                    );
+                }
+                $get_results->finish;
+                my $rows_matched = @results;
+                $tmpl->param(ERROR  => "$rows_matched Results Found");
+                $tmpl->param(RESULTS    => \@results);
+
+            } else {
+                # domain searched for doesn't belong to them
+                $tmpl->param(ERROR => "The domain, $Q::domain, which you are searching for does not appear to belong to you.");
+            }
+
+        } else {
+            # display logs for all their domains
+            my @results;
+            my $get_results = IteratedSQLSelect("login,action,zone,tld,remote_ip,oldvalues,newvalues,DATE_FORMAT(timestamp,'\%m-\%d-\%Y \%r')","log",$s_where,"ORDER BY timestamp DESC");
+            while (my ($l_login,$l_action,$l_zone,$l_tld,$l_ip,$l_oldvalues,$l_newvalues,$l_timestamp) = $get_results->fetchrow_array)
+            {
+                push(@results,{
+                    LOGIN   => $l_login,
+                    IP      => $l_ip,
+                    DOMAIN  => $l_zone . "." . $l_tld,
+                    ACTION  => $l_action,
+                    OLD     => $l_oldvalues,
+                    NEW     => $l_newvalues,
+                    DATE    => $l_timestamp }
+                );
+            }
+            $get_results->finish;
+            my $rows_matched = @results;
+            $tmpl->param(ERROR  => "$rows_matched Results Found");
+            $tmpl->param(RESULTS    => \@results);
+        }
+    }
+
+    print $tmpl->output;
+
+    &print_bottom;
+}
+
+

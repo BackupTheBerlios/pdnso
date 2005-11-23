@@ -1,0 +1,103 @@
+<HTML>
+	<HEAD><TITLE><TMPL_VAR NAME=MAIN_TITLE><TMPL_IF TITLE> - <TMPL_VAR NAME=TITLE></TMPL_IF></TITLE>
+		<link rel="stylesheet" href="style.css" type="text/css" >
+		<link rel="icon" href="favicon.ico" type="image/x-icon">
+		<link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+		<style fprolloverstyle>
+			A:hover {color: #FFFFFF}
+		</style>
+		<META NAME="description" CONTENT="<TMPL_VAR NAME=META_DESC>">
+		<META NAME="keywords" CONTENT="<TMPL_VAR NAME=META_KEYWORDS>">
+	</HEAD>
+<BODY>
+
+<TABLE border=0 cellspacing=0 cellpadding=0 width=100% bgcolor=#000000>
+<TR>
+<TD>
+<table border="0" cellspacing="1" cellpadding="0" width="100%">
+<TR>
+	<TH BGCOLOR=#d0e1f5 VALIGN=middle><TMPL_VAR NAME=BANNER_TEXT></TH>
+</TR>
+<TR>
+	<TD>
+	<TABLE WIDTH=100% CELLPADDING=0 CELLSPACING=0 BORDER=0>
+	<TR VALIGN=top>
+	<TD BGCOLOR=#FFFFFF ALIGN=right VALIGN=top WIDTH=62>&nbsp;</TD>
+<TMPL_IF BANNER>
+	<TH BGCOLOR=#FFFFFF ALIGN=CENTER VALIGN=middle><A HREF="<TMPL_VAR NAME=BANNERURL>"><IMG SRC="<TMPL_VAR NAME=BANNERIMG>" BORDER=2></A></TH>
+</TMPL_IF>
+	<TD BGCOLOR=#FFFFFF ALIGN=right VALIGN=top WIDTH=62>
+		<TMPL_VAR NAME=EXTRA_BANNER>
+	</TD>
+	</TR></TABLE>
+	</TD>
+</TR>
+<TR>
+	<TD BGCOLOR=#7d9fc4>
+		<table width="100%" border="0" cellpadding="0" cellspacing="0"  BGCOLOR=#98c2f0>
+		<TR>
+			<TD ALIGN=left>
+				<TABLE CELLPADDING=0 CELLSPACING=0 BORDER=0>
+				<TR>
+					<TD><B><A class=toplink HREF="index.html?section=intro">&nbsp;-Home-&nbsp;</A></B></TD>
+<TMPL_UNLESS LOGGEDIN>
+					<TD><B><A class=toplink HREF="signup.html">&nbsp;-Signup-&nbsp;</A></B></TD>
+</TMPL_UNLESS>
+					<TD><B><A class=toplink HREF="index.html?section=legal">&nbsp;-Restrictions and Disclaimers-&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="status.html">&nbsp;-Server Status-&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="whois.html">&nbsp;-Whois-&nbsp;</A></B></TD>
+				</TR>
+				</TABLE>
+			</TD>
+			<TD ALIGN=right>
+				<TABLE CELLPADDING=0 CELLSPACING=0 BORDER=0>
+				<TR>
+					<TD><B><A class=toplink HREF="index.html?section=contact">&nbsp;-Contact Us-&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="index.html?section=screenshots">&nbsp;-ScreenShots-&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="index.html?section=help">&nbsp;-Help-&nbsp;</A></B></TD>
+				</TR>
+				</TABLE>
+			</TD>
+		</TR>
+		</TABLE>
+	</TD>
+</TR>
+<TMPL_IF LOGGEDIN>
+<TR>
+	<TD BGCOLOR=#7d9fc4>
+		<table width="100%" border="0" cellpadding="0" cellspacing="0"  BGCOLOR=#98c2f0>
+		<TR>
+			<TD ALIGN=left class=head>&nbsp;// <A HREF=list.html title="back to the homepage">Domain admin home</A> /</TD>
+			<TD ALIGN=right>
+				<TABLE CELLPADDING=0 CELLSPACING=0 BORDER=0>
+				<TR>
+					<TD><B><A class=toplink HREF="list.html?action=domain_add">&nbsp;::Add domain::&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="list.html?action=listall">&nbsp;::List All Domains::&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="list.html?action=listpending">&nbsp;::List Pending Domains::&nbsp;</A></B></TD>
+					<TD><B><A class=toplink HREF="changelog.html">&nbsp;::Show Changelog::&nbsp;</A></B></TD>
+				</TR>
+				</TABLE>
+			</TD>
+		</TR>
+		</TABLE>
+	</TD>
+</TR>
+</TMPL_IF>
+<TR>
+	<TD BGCOLOR=#7d9fc4>
+		<table width="100%" border="0" cellpadding="0" cellspacing="0"  BGCOLOR=#98c2f0>
+		<TR>
+		<TMPL_IF LOGGEDIN>
+			<TD ALIGN=left><FORM METHOD=post action=list.html><INPUT TYPE=hidden name=action value=display_query><INPUT TYPE=submit value="List domain:"><INPUT TYPE=text name=domain maxlength=255 value="<TMPL_VAR NAME=DOMAIN>"></FORM></TD>
+			<TD ALIGN=right><FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>"><INPUT TYPE=hidden name=action value=logout>&nbsp;<A HREF=list.html?action=chpasswd><B>::<TMPL_VAR NAME=LOGIN>::</B></A>&nbsp;<INPUT TYPE=submit value="Logout"></FORM></TD>
+		<TMPL_ELSE>
+			<TD ALIGN=right BGCOLOR=#d0e1f5><FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>"><INPUT TYPE=hidden name=action value=login>Login:<INPUT TYPE=text name=login maxlength=255 size=15>Password:<INPUT TYPE=password name=passwd size=15><INPUT TYPE=submit value="Login"></FORM></TD>
+		</TMPL_IF>
+		</TR>
+		</TABLE>
+	</TD>
+</TR>
+</TABLE>
+</TD></TR>
+</TABLE>
+

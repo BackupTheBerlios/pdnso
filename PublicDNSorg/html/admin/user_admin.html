@@ -1,0 +1,274 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/admin/user_admin.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+user_admin.html - Public-DNS.org user administration frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use CGI qw(:standard);
+use Time::Local;
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $thisscript  = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $system_name = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "search")
+    {
+        &search;
+    } elsif ($Q::action eq "listall") {
+        &listall;
+    } elsif ( ($Q::action eq "delete") && ($Q::id =~ /^\d+$/) ) {
+        &del($Q::id);
+    } else {
+        &default;
+    }
+}
+
+sub search
+{
+    print header;
+    print "<HTML><HEAD></HEAD><BODY>
+<B>$system_name user administration</B><BR>
+<BR>\n";
+
+    &print_search_form;
+
+    print "<HR><B>Search Results:</B><BR><BR>\n";
+
+    &print_search_results($Q::searchtype);
+
+    print "</BODY></HTML>\n";
+}
+
+sub default
+{
+    print header;
+    print "<HTML><HEAD></HEAD><BODY>
+<B>$system_name user administration</B><BR>
+<BR>\n";
+
+    &print_search_form;
+
+    print "</BODY></HTML>\n";
+}
+
+sub listall
+{
+    print header;
+    print "<HTML><HEAD></HEAD><BODY>
+<B>$system_name user administration</B><BR>
+<BR>\n";
+
+    &print_search_form;
+
+    print "<HR><B>Search Results:</B><BR><BR>\n";
+
+    &get_listall;
+
+    print "</BODY></HTML>\n";
+}
+
+sub get_listall
+{
+    print "<TABLE BORDER=1>
+<TR>
+    <TH>Login</TH>
+    <TH>Group</TH>
+    <TH>uid</TH>
+    <TH>owner id</TH>
+    <TH>Send Backups</TH>
+    <TH>Signup</TH>
+</TR>\n";
+
+    my $getall = IteratedSQLSelect("uid,ownerid,login,DATE_FORMAT(signup,'\%m-\%d-\%Y'),loginclass,sendbackups","logins","","ORDER BY loginclass,login");
+    while (my ($uid,$ownerid,$login,$signup,$loginclass,$sendbackups) = $getall->fetchrow_array)
+    {
+        print "    <TR>
+        <TD>$login</TD>
+        <TD>$loginclass</TD>
+        <TD>$uid</TD>
+        <TD>$ownerid</TD>
+        <TD>$sendbackups</TD>
+        <TD>$signup</TD>
+    </TR>\n";
+    }
+    $getall->finish;
+    print "</TABLE><HR>\n";
+}
+
+sub print_search_results
+{
+    my $type = shift; # date || name
+
+    my $where;
+    if ($type eq 'date')
+    {
+        my $start_stamp = timelocal('0','0','0',$Q::s_day,($Q::s_month - 1),($Q::s_year - 1900));
+        my $end_stamp = timelocal('59','59','23',$Q::e_day,($Q::e_month - 1),($Q::e_year - 1900));
+        $where = "UNIX_TIMESTAMP(signup) >= $start_stamp AND UNIX_TIMESTAMP(signup) <= $end_stamp";
+    } else {
+        my $value = $Q::value;
+        $value =~ s/\*+/\*/g;
+        $value =~ s/\*/\%/g;
+        $value =~ s/'/''/g;
+        $value = "'$value'";
+        $where = "$Q::field like $value";
+    }
+
+    print "<TABLE BORDER=1>
+<TR>
+    <TH>Login</TH>
+    <TH>Group</TH>
+    <TH>uid</TH>
+    <TH>owner id</TH>
+    <TH>Send Backups</TH>
+    <TH>Signup</TH>
+</TR>\n";
+
+    my $orderby = "loginclass,login";
+    $orderby = $Q::orderby . "," . $orderby if $Q::orderby;
+
+    my $getall = IteratedSQLSelect("uid,ownerid,login,DATE_FORMAT(signup,'\%m-\%d-\%Y'),loginclass,sendbackups","logins",$where,"ORDER BY $orderby");
+    while (my ($uid,$ownerid,$login,$signup,$loginclass,$sendbackups) = $getall->fetchrow_array)
+    {
+        print "    <TR>
+        <TD>$login</TD>
+        <TD>$loginclass</TD>
+        <TD>$uid</TD>
+        <TD>$ownerid</TD>
+        <TD>$sendbackups</TD>
+        <TD>$signup</TD>
+    </TR>\n";
+    }
+    $getall->finish;
+    print "</TABLE><HR>\n";
+}
+
+sub print_search_form
+{
+    my $now = time;
+    my $yesterday = ($now - (60*60*24));
+    my ($sec,$min,$hr,$day,$mon,$year) = localtime($yesterday);
+    $mon++; $year+=1900;
+    my ($n_sec,$n_min,$n_hr,$n_day,$n_mon,$n_year) = localtime($now);
+    $n_mon++; $n_year+=1900;
+    print "
+<A HREF=$thisscript?action=listall>List all registered users</A>
+<HR>
+<FORM METHOD=post action=$thisscript>
+<INPUT TYPE=hidden name=action value=search>
+<INPUT TYPE=hidden name=searchtype value=name>
+Search for logins with <SELECT name=field>\n";
+    print "    <OPTION VALUE=$Q::field>$Q::field\n" if $Q::field;
+    print "
+    <OPTION VALUE=login>login
+    <OPTION VALUE=ownerid>Owner ID
+    <OPTION VALUE=uid>User ID
+    <OPTION VALUE=loginclass>Access Group
+    <OPTION VALUE=sendbackups>Send Backups Bool
+    </SELECT> matching <INPUT TYPE=text name=value value=\"$Q::value\"><INPUT TYPE=submit><BR>
+<I>(you can use <B>*</B> to do wildcard matches)</I>
+</FORM>
+<HR>
+<FORM METHOD=post action=$thisscript>
+<INPUT TYPE=hidden name=action value=search>
+<INPUT TYPE=hidden name=searchtype value=date>
+Search for logins added:<BR>
+After: <SELECT name=s_month>\n";
+    print "    <OPTION VALUE=$Q::s_month>$Q::s_month\n" if $Q::s_month;
+    print "    <OPTION VALUE=$mon>$mon\n";
+    for (my $i=1; $i<13; $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT>-<SELECT name=s_day>\n";
+    print "    <OPTION VALUE=$Q::s_day>$Q::s_day\n" if $Q::s_day;
+    print "    <OPTION VALUE=$day>$day\n";
+    for (my $i=1; $i<32; $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT>-<SELECT name=s_year>\n";
+    print "    <OPTION VALUE=$Q::s_year>$Q::s_year\n" if $Q::s_year;
+    print "    <OPTION VALUE=$year>$year\n";
+    for (my $i=2001; $i<($year+1); $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT><BR>
+Before: <SELECT name=e_month>\n";
+    print "    <OPTION VALUE=$Q::e_month>$Q::e_month\n" if $Q::e_month;
+    print "    <OPTION VALUE=$n_mon>$n_mon\n";
+    for (my $i=1; $i<13; $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT>-<SELECT name=e_day>\n";
+    print "    <OPTION VALUE=$Q::e_day>$Q::e_day\n" if $Q::e_day;
+    print "    <OPTION VALUE=$n_day>$n_day\n";
+    for (my $i=1; $i<32; $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT>-<SELECT name=e_year>\n";
+    print "    <OPTION VALUE=$Q::e_year>$Q::e_year\n" if $Q::e_year;
+    print "    <OPTION VALUE=$n_year>$n_year\n";
+    for (my $i=2001; $i<($n_year+1); $i++)
+    {
+        print "    <OPTION VALUE=$i>$i\n";
+    }
+    print "</SELECT><BR>
+    Sort By: <SELECT NAME=orderby>\n";
+    print "        <OPTION VALUE=$Q::orderby>$Q::orderby\n" if $Q::orderby;
+    print "
+        <OPTION VALUE=login>Login
+        <OPTION VALUE=loginclass>Group
+        <OPTION VALUE=uid>uid
+        <OPTION VALUE=ownerid>Owner ID
+        <OPTION VALUE=sendbackups>Send Backups
+        <OPTION VALUE=signup>Signup Date
+    </SELECT><INPUT TYPE=submit>
+</FORM>\n";
+}

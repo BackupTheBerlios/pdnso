@@ -1,0 +1,39 @@
+<BR>
+<TMPL_IF ERROR><H2><TMPL_VAR NAME=ERROR></H2></TMPL_IF>
+<B>Options for user: <TMPL_VAR NAME=EMAIL></B><BR>
+<BR>
+<HR>
+<B>Change Password</B><BR>
+<BR>
+<FORM METHOD=post ACTION=list.html>
+<INPUT TYPE=hidden name=action value=conf_chpasswd>
+To change your password for the login <B><TMPL_VAR NAME=EMAIL></B>, simply enter the new password you would like on the account, enter it again in the confirmation box, and click the "Update Password" button.<BR>
+<BR>
+<B>New Password: <INPUT TYPE=password name=newpassword size=40></B><BR>
+<B>Confirm Password: <INPUT TYPE=password name=confpassword size=40></B><BR>
+<INPUT TYPE=submit value="Update Password"><BR>
+</FORM>
+<DIV ALIGN=CENTER><I>Password must be at least 6 characters long, and contain at least one letter, and one number or symbol</I></DIV><BR>
+<HR>
+<B>Configure Automated Backups</B><BR>
+<BR>
+<FORM METHOD=post ACTION=list.html>
+<INPUT TYPE=hidden name=action value=conf_sendbackups>
+To change your backup settings, simply select the backup frequency you desire, adn click the "Update Frequency" button. Enabling backups of your domain records will send an e-mail to your account (<TMPL_VAR NAME=EMAIL>) for ever domain you have registered once during every frequency period. The subject will begin with the text "Public-DNS.org backup of domain: " followed by the domain being backed up. You can use this text to setup filters in your e-mail client. Setting this to "never" will disable these automated backups.<BR>
+<BR>
+<B>Backup Frequency:</B> <SELECT name=frequency><TMPL_LOOP FREQUENCY>
+	<OPTION><TMPL_VAR NAME=PERIOD></OPTION>
+	</TMPL_LOOP>
+	</SELECT><INPUT TYPE=submit value="Update Frequency">
+</FORM>
+<BR>
+<HR>
+<B>Change email address (login name)</B><BR>
+<BR>
+<FORM METHOD=post ACTION=list.html>
+<INPUT TYPE=hidden name=action value=conf_chemail>
+To change your email address, which is also used as your login id, enter the new email address in the field below and click on the "Change Email" button. The email address you enter must be a valid email address. A message will be sent to that address containing a link. You must go to that link before the change will become effective.<BR>
+<BR>
+<B>New Email Adrress:</B> <INPUT TYPE=text name=email size=50 maxlength=255><INPUT TYPE=submit value="Change Email">
+</FORM>
+<BR>

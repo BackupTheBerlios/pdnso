@@ -1,0 +1,1642 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/list.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+list.html - Public-DNS.org domain listing / viewing / searching frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard escape unescape);
+use IO::Socket;
+use PublicDNS::CryptWrapper;
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $our_dns_server   = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
+my @our_dns_servers  = split(',', $cfg->{'dig_settings'}->{'our_dns_server_name_list'});
+@our_dns_servers     = ($our_dns_server) unless @our_dns_servers;
+my $soa_nameserver   = $cfg->{'system'}->{'soa_nameserver'} || '[NOT CONFIGURED BY ADMIN]';
+
+my $email_sig = $cfg->{'system'}->{'email_sig'} || 'support';
+my $root_uri  = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri     =~ s/\/+$//; # remove trailing slash
+
+my $reply_to            = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $admin_email         = $cfg->{'system'}->{'admin_email_addr'}    || 'root';
+my $system_name         = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+my $default_admin_email = $cfg->{'dns'}->{'default_soa_email'};
+$default_admin_email    =~ s/\@/\./; # incase they don't do it themselves...
+my $valid_domain_chars  = "A-Za-z0-9\\.-";
+my $thisscript          = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript           = "/edit.html";
+
+# list of zones we don't let normal people add
+my %restricted_zones = map{ s/\s+//g; lc($_) => 1 } split(',', $cfg->{'system'}->{'restricted_zones'});
+
+my %valid_types = (
+    A   => 1,
+    AAAA => 1,
+    MX  => 1,
+    TXT => 1,
+    NS  => 1,
+    CNAME   => 1,
+    HINFO   => 1,
+    PTR => 1
+    );
+my @type_order = qw(
+    NS
+    MX
+    A
+    AAAA
+    CNAME
+    HINFO
+    TXT
+    PTR
+    );
+my @backup_frequency = qw(
+    never
+    weekly
+    monthly
+    );
+my %backup_frequency = (
+    'never' => 0,
+    'weekly' => 1,
+    'monthly' => 2
+    );
+my ($config_statuses,$config_statusesmap) = load_config_statuses;
+
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid,$loginclass) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+#   We don't do this anymore
+#   if ( ($Q::action eq "auth") && $Q::id) {
+#       &auth_addition($Q::id,$uid);
+#       return;
+#   }
+
+    if ($status <= 0)
+    {
+        &print_top(0,$thisscript,'list - not logged in');
+        &print_error("Not Logged In.");
+        return;
+    }
+
+    if ( ($Q::action eq "display") && ($Q::Cid =~ /^\d+$/) )
+    {
+        &display($Q::Cid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "display_query") && $Q::domain) {
+        if ($Q::domain =~ /^[\*$valid_domain_chars]+\.[A-Za-z\*]{1,3}$/) {
+            &search($Q::domain,$uid,$loginclass);
+        } else {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("Invalid domain characters entered. Valid characters are: a-z 0-9 dash(-) and period(.)");
+            return;
+        }
+    } elsif ( $Q::action eq "domain_add") {
+        &domain_add($uid,$loginclass);
+    } elsif ( ($Q::action eq "domain_add_verify") && $Q::zone && $Q::tld && $Q::type) {
+        &domain_add_verify($uid,$Q::zone,$Q::tld,$Q::type,$loginclass);
+    } elsif ( ($Q::action eq "domain_add_slave") && $Q::zone && $Q::tld && $Q::master) {
+        &domain_add_slave($uid,$Q::zone,$Q::tld,$Q::master,$loginclass);
+    } elsif ( $Q::action eq "listall" ) {
+        &search("*.*",$uid,$loginclass);
+    } elsif ( ($Q::action eq "delete") && ($Q::Cid =~ /^\d+$/) ) {
+        &domain_delete($Q::Cid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "soa_edit") && ($Q::Cid =~ /^\d+$/) ) {
+        &soa_edit($Q::Cid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "rr_add") && ($Q::Cid =~ /^\d+$/) && $valid_types{$Q::type}) {
+        &rr_add($Q::Cid,$uid,$Q::type,$loginclass);
+    } elsif ( ($Q::action eq "rr_delete") && ($Q::RRid =~ /^\d+$/) ) {
+        &rr_delete($Q::RRid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "rr_edit") && ($Q::RRid =~ /^\d+$/) ) {
+        &rr_edit($Q::RRid,$uid,$loginclass);
+
+    #######################
+    # Pending Domains Stuff
+    } elsif ($Q::action eq "listpending") {
+        &list_pending($uid,$loginclass);
+    } elsif ( ($Q::action eq "pendingdelete") && ($Q::Cid =~ /^\d+$/) ) {
+        &delete_pending($uid,$Q::Cid,$loginclass);
+    } elsif ( ($Q::action eq "pendingconfdelete") && ($Q::Cid =~ /^\d+$/) ) {
+        &delete_confpending($uid,$Q::Cid,$loginclass);
+
+    #######################################
+    # Change User Password and Backup Stuff
+    } elsif ($Q::action eq "chpasswd") {
+        &chpasswd($uid,$loginclass);
+    } elsif ($Q::action eq "conf_chpasswd") {
+        &conf_chpasswd($uid,$loginclass);
+    } elsif ($Q::action eq "conf_sendbackups") {
+        &conf_sendbackups($uid,$loginclass);
+
+    ####################
+    # Change login email
+    } elsif ( ($Q::action eq "conf_chemail") && ($Q::email) ) {
+        &chemail($uid,$loginclass);
+
+    # URL Forwarding/Redirection
+    } elsif ( ($Q::action eq "rr_add") && ($Q::Cid =~ /^\d+$/) && ($Q::type eq 'URL') ) {
+        &url_add($Q::Cid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "url_edit") && ($Q::urid =~ /^\d+$/) ) {
+        &url_edit($Q::urid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "url_delete") && ($Q::urid =~ /^\d+$/) ) {
+        &url_delete($Q::urid,$uid,$loginclass);
+
+    } else {
+        &default($uid,$loginclass);
+    }
+
+}
+
+sub url_add
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$status) = SQLSelect(
+        "ownerid,zone,tld,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'list url add');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/url_add.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(CID => $Cid);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+
+    print $tmpl->output;
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub chemail
+{
+    my $uid = shift;
+
+    my ($login,$sendbackups) = SQLSelect("login,sendbackups","logins","uid = $uid");
+    my ($exists) = SQLSelect("uid",'logins',"login = " . SQLQuote($Q::email));
+
+    my @frequency = ( { PERIOD => $backup_frequency[$sendbackups] } );
+    foreach my $freq (@backup_frequency)
+    {
+        push(@frequency, { PERIOD => $freq } );
+    }
+
+    &print_top($uid,$thisscript,'Change Email');
+
+    if ($exists)
+    {   # new login selected already exsits
+        # print error, and reprint form
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "The new email/login you requested is already in use. Please choose an email address that is unique to our system.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    } elsif ($login !~ /^[^\@\&]+\@[^\@\&]+\.[^\@\&]+$/) {
+        # invalid e-mail
+        # print error, and reprint form
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "The new email/login you requested does not appear to be a valid e-mail address. Please re-enter it and try again.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    } else {
+        # ok to try to update
+        my $crypt_passwd = SQLSelect("passwd","logins","uid = $uid");
+        my $encoded_key = escape($uid . '&' . $Q::email . '&' . $crypt_passwd);
+        my $etmpl = HTML::Template->new(filename => $tmpl_dir . "/email_changelogin.tmpl", cache => 1);
+        $etmpl->param(ROOT_URI => $root_uri);
+        $etmpl->param(SYSTEM_NAME => $system_name);
+        $etmpl->param(EMAIL_SIG => $email_sig);
+        $etmpl->param(OLDLOGIN => $login);
+        $etmpl->param(NEWLOGIN => $Q::email);
+        $etmpl->param(KEY => escape($encoded_key)); # url escaped key
+        $etmpl->param(KEY2 => $encoded_key);    # key for form entry
+        my %mail = (
+            from    => $reply_to,
+            to      => $Q::email,
+            subject => "$system_name login change request.",
+            msg     => $etmpl->output
+            );
+        &send_mail(%mail);
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chlogin_sent.tmpl", cache => 1);
+        $tmpl->param(EMAIL => $Q::email);
+        print $tmpl->output;
+    }
+    &print_bottom;
+}
+
+sub chpasswd
+{
+    my $uid = shift;
+
+    my ($login,$sendbackups) = SQLSelect("login,sendbackups","logins","uid = $uid");
+
+    my @frequency = ( { PERIOD => $backup_frequency[$sendbackups] } );
+    foreach my $freq (@backup_frequency)
+    {
+        push(@frequency, { PERIOD => $freq } );
+    }
+
+    &print_top($uid,$thisscript,'change password');
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+    $tmpl->param(EMAIL => $login);
+    $tmpl->param(FREQUENCY => \@frequency);
+    print $tmpl->output;
+    &print_bottom;
+}
+
+sub conf_sendbackups
+{
+    my $uid = shift;
+
+    my ($login,$sendbackups) = SQLSelect('login,sendbackups',"logins","uid = $uid");
+
+    &print_top($uid,$thisscript,'send backups');
+
+    if (! defined($backup_frequency{$Q::frequency}) ) {
+        # invalid backup frequency, do nothing, print error
+        my @frequency = ( { PERIOD => $backup_frequency[$sendbackups] } );
+        foreach my $freq (@backup_frequency)
+        {
+            push(@frequency, { PERIOD => $freq } );
+        }
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "The backup frequency you requested was invalid. Please select one from the list and try again.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    } else {
+        # ok to update
+
+        if ($sendbackups != $backup_frequency{$Q::frequency})
+        {
+            $sendbackups = $backup_frequency{$Q::frequency};
+            SQLUpdate('logins',['sendbackups'],[$backup_frequency{$Q::frequency}],"uid = $uid");
+        }
+        my @frequency = ( { PERIOD => $backup_frequency[$sendbackups] } );
+        foreach my $freq (@backup_frequency)
+        {
+            push(@frequency, { PERIOD => $freq } );
+        }
+
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "Your automated DNS backups have been schedualed for a $Q::frequency delivery by e-mail to $login.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    }
+
+    &print_bottom;
+}
+
+sub conf_chpasswd
+{
+    my $uid = shift;
+
+    my ($login,$sendbackups) = SQLSelect('login,sendbackups',"logins","uid = $uid");
+
+    my @frequency = ( { PERIOD => $backup_frequency[$sendbackups] } );
+    foreach my $freq (@backup_frequency)
+    {
+        push(@frequency, { PERIOD => $freq } );
+    }
+
+    &print_top($uid,$thisscript,'change password');
+
+    if ($Q::newpassword ne $Q::confpassword) {
+        # passwords did't match
+        # print error, and reprint form
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "The new password you submitted did not match the confirmation password.<BR>Please re-enter them and try again.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    } elsif (! ((length($Q::newpassword) >= 6) && ($Q::newpassword =~ /[^A-Za-z]/) && ($Q::newpassword =~ /[A-Za-z]/)) ) {
+        # invalid password
+        # print error, and reprint form
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/chpasswd.tmpl", cache => 1);
+        $tmpl->param(ERROR => "Submitted password is not secure enough.<BR>Please choose a password that is at least 6 characters long, and contains at least one letter, and one number or symbol.");
+        $tmpl->param(EMAIL => $login);
+        $tmpl->param(FREQUENCY => \@frequency);
+        print $tmpl->output;
+    } else {
+        # ok to update
+        my $crypt_newpassword = &PublicDNS::Auth::_getcrypt($Q::newpassword);
+        SQLUpdate(
+            "logins",
+            ["passwd"],[$crypt_newpassword],
+            "uid = $uid" );
+
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/chpasswd_conf.tmpl', cache => 1);
+        $tmpl->param(EMAIL => $login);
+        print $tmpl->output;
+    }
+
+    &print_bottom;
+}
+
+sub delete_confpending
+{
+    my $uid = shift;
+    my $Cid = shift;
+    my $loginclass = shift;
+
+    my ($zone,$tld);
+    if ($loginclass eq "admin")
+    {
+        ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Cid");
+    } else {
+        my $ownerid = SQLSelect("ownerid","logins","uid = $uid");
+        ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Cid AND ownerid = $ownerid AND status != " . SQLQuote($config_statuses->{'Active'}));
+    }
+
+    unless ($zone && $tld)
+    {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("Submitted pending zone does not appear to belong to you");
+        return;
+    }
+
+    if (&send_domain_delete($Cid,$uid))
+    {
+        print redirect($thisscript . "?action=listpending");
+    } else {
+        &print_top($uid,$thisscript);
+        &print_error("Error removing zone, no action will be taken. Please contact support.");
+    }
+}
+
+sub delete_pending
+{
+    my $uid = shift;
+    my $Cid = shift;
+    my $loginclass = shift;
+
+    my ($zone,$tld);
+    if ($loginclass eq "admin")
+    {
+        ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Cid");
+    } else {
+        my $ownerid = SQLSelect("ownerid","logins","uid = $uid");
+        ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Cid AND ownerid = $ownerid AND status != " . SQLQuote($config_statuses->{'Active'}));
+    }
+
+    unless ($zone && $tld)
+    {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("Submitted pending zone does not appear to belong to you");
+        return;
+    }
+
+    &print_top($uid,$thisscript,'delete pending');
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/list_pendingdelete.tmpl", cache => 1);
+    $tmpl->param(DOMAIN => "$zone.$tld");
+    $tmpl->param(DELETE => $thisscript . "?action=pendingconfdelete\&Cid=$Cid");
+    $tmpl->param(CANCEL => $thisscript . "?action=listpending");
+    print $tmpl->output;
+    &print_bottom;
+}
+
+sub list_pending
+{
+    my $uid = shift;
+    my $loginclass = shift;
+
+    my $p_where;
+    if ($loginclass eq 'admin')
+    {
+        $p_where = "";
+    } else {
+        my $ownerid = SQLSelect("ownerid","logins","uid = $uid");
+        $p_where = "AND c.ownerid = $ownerid";
+    }
+
+    my @domains;
+
+    my $get_pending = IteratedSQLSelect("c.Cid,c.zone,c.tld,c.added,p.lastcheck,p.notified,c.status","conf c, pending_data p","c.Cid = p.Cid AND status != " . SQLQuote($config_statuses->{'Active'}) . $p_where);
+    while (my($Cid,$zone,$tld,$added,$lastcheck,$notified,$status) = $get_pending->fetchrow_array)
+    {
+        push(@domains,{
+            DOMAIN  => $zone . "." . $tld,
+            STATUS  => $config_statusesmap->{$status},
+            ADDED   => $added,
+            CHECKED => $lastcheck,
+            NOTIFIED    => $notified,
+            DELETE  => $thisscript . "?action=pendingdelete\&Cid=$Cid"
+            } );
+    }
+    $get_pending->finish;
+
+    &print_top($uid,$thisscript,'list pending');
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/list_pending.tmpl", cache => 1);
+    my @dns_servers;
+    foreach my $server (@our_dns_servers)
+    {
+        push(@dns_servers, { FQDN => $server });
+    }
+    $tmpl->param(DNS_SERVERS => \@dns_servers);
+    $tmpl->param(DOMAINS => \@domains);
+    print $tmpl->output;
+    &print_bottom;
+}
+
+#TODO use stuff from here for adding pending domains
+# THIS ISN'T USED ANYMORE
+sub auth_addition
+{
+    my ($id,$uid) = @_;
+
+    my ($pid,$ownerid,$zone,$tld,$master,$added) = SQLSelect(
+        "Pid,ownerid,zone,tld,master,added",
+        "Pending","PKey = " . SQLQuote($id) );
+
+    unless ($pid)
+    {
+        &print_top($uid,$thisscript,'list error'); #login is actually unknown
+        &print_error("Submitted key no longer exists in the pending queue.");
+        return;
+    }
+
+    my $slave = 1 if $master;
+    $master = 'NULL' unless $slave;
+
+    my $old_cid = SQLSelect("max(Cid)","conf");
+    SQLInsert("conf",
+        ['Cid','ownerid','zone','tld','active','master','admin_email','modified'],
+        ['NULL',$ownerid,$zone,$tld,1,$master,$default_admin_email,0] );
+    my $new_cid = SQLSelect("max(Cid)","conf");
+    if ($new_cid > $old_cid)
+    {
+        SQLDelete("Pending","Pid = $pid");
+        unless ($slave)
+        { # if we're adding a master
+            # add default NS records
+            foreach my $dns_server (@our_dns_servers)
+            {
+                $dns_server .= '.' unless $dns_server =~ /\.$/;
+                my $old_rrid = SQLSelect("max(RRid)","RRs");
+                SQLInsert("RRs",['RRid','Cid','record','type'],
+                                ['NULL',$new_cid,"$zone.$tld.",'NS'] );
+                my $new_rrid = SQLSelect("max(RRid)","RRs");
+                if ($new_rrid > $old_rrid)
+                {
+                    SQLInsert("RR_NS",['RRid','value'],[$new_rrid,$dns_server]);
+                }
+            }
+            # add default A record for domain
+            my $old4_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"$zone.$tld.",'A'] );
+            my $new4_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new4_rrid > $old4_rrid)
+            {
+                SQLInsert("RR_A",['RRid','A','B','C','D'],[$new4_rrid,127,0,0,1]);
+            }
+            # add default mail A record for domain
+            my $old5_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"mail.$zone.$tld.",'A'] );
+            my $new5_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new5_rrid > $old5_rrid)
+            {
+                SQLInsert("RR_A",['RRid','A','B','C','D'],[$new5_rrid,127,0,0,1]);
+            }
+            # add default MX record for domain
+            my $old6_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"$zone.$tld.",'MX'] );
+            my $new6_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new6_rrid > $old6_rrid)
+            {
+                SQLInsert("RR_MX",['RRid','pref','value'],[$new6_rrid,10,"mail.$zone.$tld."]);
+            }
+        } # end master (unless $slave) stuff
+
+        # log it
+        my $login;
+        if ($uid)
+        {
+            $login = SQLSelect('login','logins',"uid = $uid");
+        } else {
+            $login = 'anonymous';
+            $uid = 0;
+        }
+        SQLInsert('log',
+            ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+            ['NULL',$login,$uid,$ownerid,'domain_add',$zone,$tld,$ENV{REMOTE_ADDR},"Cid=$new_cid ownerid=$ownerid master=$master admin_email=$default_admin_email",'NULL'] );
+
+        &print_top($uid,$thisscript,'authorize addition'); #login is actually unknown
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_add_confirmed.tmpl", cache => 1);
+        $tmpl->param(DOMAIN => "$zone.$tld");
+        print $tmpl->output;
+        &print_bottom;
+
+        # send call to daemon to actually add the domain.
+        my $sock = new IO::Socket::INET (
+            LocalAddr   => $cfg->{'daemon'}->{'webserver_addr'} || '',
+            PeerAddr    => $cfg->{'daemon_master'}->{'addr'},
+            PeerPort    => $cfg->{'daemon_master'}->{'port'} || 5201,
+            Proto       => 'tcp'
+            );
+        if ($sock)
+        {
+            if ($slave)
+            {
+                my $query = encrypt( ('addslave',"$zone.$tld",$new_cid,$master,1) );
+                print $sock $query;
+                close($sock);
+            } else {
+                my $dbfile_data = &build_db_file($new_cid);
+                my $query = encrypt( ('add',"$zone.$tld",$new_cid,$dbfile_data,1) );
+                print $sock $query;
+                close($sock);
+            }
+        } else { # end if $sock
+            my %mail = (
+                from    => $reply_to,
+                to      => $admin_email,
+                subject => 'DNS Socket Open to Daemon FAILED',
+                msg     => "Failed trying to authorize addition of domain:
+    $zone.$tld
+    for Cid: $id
+    for ownerid: $ownerid
+" . localtime()
+                );
+            &send_mail(%mail);
+        } # end else from if $sock
+
+    } else {
+        &print_top(0,$thisscript,'list error'); #login is actually unknown
+        &print_error("There was an error while adding your domain $zone.$tld. Please try again later");
+    }
+}
+
+sub domain_add_slave
+{
+    my ($uid,$zone,$tld,$master,$loginclass) = @_;
+    return &domain_add_sql($uid,$zone,$tld,$master,$loginclass);
+}
+
+sub domain_add_sql
+{
+    my ($uid,$zone,$tld,$master,$loginclass) = @_;
+    my ($new_zone,$new_tld) = &verify_new_zone($zone,$tld,$uid);
+    unless ($new_zone && $new_tld)
+    {
+        return;
+    }
+
+    my $conf_master = &lint_ip($master);
+
+    if ($master && (!$conf_master) )
+    {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("Invalid address for master name server. Address must be a valid IPv4 IP Address.");
+        return;
+    }
+
+    my ($zone_exists,$status) = SQLSelect('cid,status','conf','zone = ' . SQLQuote($new_zone) . ' AND tld = ' . SQLQuote($new_tld) );
+    if ($zone_exists)
+    {
+        &print_top($uid,$thisscript,'list error');
+        if ($status != $config_statuses->{'Active'})
+        {
+            &print_error("<B>Duplicate zone submitted.</B><BR>The domain you submitted ($new_zone.$new_tld) has already beed added to the pending queue on $system_name, and will be auto-matically checked. Please check the domain admin, and click the 'List Pending Domains' link.");
+        } else {
+            &print_error("<B>Duplicate zone submitted.</B><BR>The domain you submitted ($new_zone.$new_tld) has already beed added to $system_name. Please check the domain admin, and click the 'List All Domains' link.");
+        }
+        return;
+    }
+    # don't allow people to add our domains unless they're an admin
+    if ( ($loginclass ne 'admin') &&
+         $restricted_zones{lc($new_zone.'.'.$new_tld)} )
+    {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("<B>ERROR: Restricted Zone.</B><BR>The domain your submitted ($new_zone.$new_tld) is restricted, and may not be added to our servers. Feel free to contact us if you happen to be the true owner of the domain.");
+        return;
+    }
+
+    my $ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+    my $slave = 1 if $conf_master;
+    $conf_master = 'NULL' unless $slave;
+
+    my $sqlnow = SQLSelect("NOW()");
+
+    my $old_cid = SQLSelect("max(Cid)","conf");
+    SQLInsert("conf",
+        ['Cid','ownerid','zone','tld','added','master','admin_email','modified','status'],
+        ['NULL',$ownerid,$new_zone,$new_tld,$sqlnow,$conf_master,$default_admin_email,0,$config_statuses->{'Pending Check'}] );
+    my $new_cid = SQLSelect("max(Cid)","conf");
+    if ($new_cid > $old_cid)
+    {
+        SQLInsert("pending_data",['Cid'],[$new_cid]);
+        unless ($slave)
+        { # if we're adding a master
+            # add default NS records
+            foreach my $dns_server (@our_dns_servers)
+            {
+                $dns_server .= '.' unless $dns_server =~ /\.$/;
+                my $old_rrid = SQLSelect("max(RRid)","RRs");
+                SQLInsert("RRs",['RRid','Cid','record','type'],
+                                ['NULL',$new_cid,"$new_zone.$new_tld.",'NS'] );
+                my $new_rrid = SQLSelect("max(RRid)","RRs");
+                if ($new_rrid > $old_rrid)
+                {
+                    SQLInsert("RR_NS",['RRid','value'],[$new_rrid,$dns_server]);
+                }
+            }
+            # add default A record for domain
+            my $old4_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"$new_zone.$new_tld.",'A'] );
+            my $new4_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new4_rrid > $old4_rrid)
+            {
+                SQLInsert("RR_A",['RRid','A','B','C','D'],[$new4_rrid,127,0,0,1]);
+            }
+            # add default mail A record for domain
+            my $old5_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"mail.$new_zone.$new_tld.",'A'] );
+            my $new5_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new5_rrid > $old5_rrid)
+            {
+                SQLInsert("RR_A",['RRid','A','B','C','D'],[$new5_rrid,127,0,0,1]);
+            }
+            # add default MX record for domain
+            my $old6_rrid = SQLSelect("max(RRid)","RRs");
+            SQLInsert("RRs",['RRid','Cid','record','type'],
+                            ['NULL',$new_cid,"$new_zone.$new_tld.",'MX'] );
+            my $new6_rrid = SQLSelect("max(RRid)","RRs");
+            if ($new6_rrid > $old6_rrid)
+            {
+                SQLInsert("RR_MX",['RRid','pref','value'],[$new6_rrid,10,"mail.$new_zone.$new_tld."]);
+            }
+        } # end master (unless $slave) stuff
+
+        # log it
+        my $login;
+        if ($uid)
+        {
+            $login = SQLSelect('login','logins',"uid = $uid");
+        } else {
+            $login = 'anonymous';
+            $uid = 0;
+        }
+        SQLInsert('log',
+            ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+            ['NULL',$login,$uid,$ownerid,'domain_add_pending',$new_zone,$new_tld,$ENV{REMOTE_ADDR},"Cid=$new_cid ownerid=$ownerid master=$master admin_email=$default_admin_email",'NULL'] );
+
+        &print_top($uid,$thisscript,'add pending domain'); #login is actually unknown
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_add_verify.tmpl", cache => 1);
+        $tmpl->param(DOMAIN => "$new_zone.$new_tld");
+        print $tmpl->output;
+        &print_bottom;
+
+        # send call to daemon to actually add the domain.
+        my $sock = new IO::Socket::INET (
+            LocalAddr   => $cfg->{'daemon'}->{'webserver_addr'} || '',
+            PeerAddr    => $cfg->{'daemon_master'}->{'addr'},
+            PeerPort    => $cfg->{'daemon_master'}->{'port'} || 5201,
+            Proto       => 'tcp'
+            );
+        if ($sock)
+        {
+            if ($slave)
+            {
+                my $query = encrypt( ('addslave',"$new_zone.$new_tld",$new_cid,$master,1) );
+                print $sock $query;
+                close($sock);
+            } else {
+                my $dbfile_data = &build_db_file($new_cid);
+                my $query = encrypt( ('add',"$new_zone.$new_tld",$new_cid,$dbfile_data,1) );
+                print $sock $query;
+                close($sock);
+            }
+        } else { # end if $sock
+            my %mail = (
+                from    => $reply_to,
+                to      => $admin_email,
+                subject => 'DNS Socket Open to Daemon FAILED',
+                msg     => "Failed trying to authorize addition of domain:
+    $new_zone.$new_tld
+    for Cid: $new_cid
+    for ownerid: $ownerid
+" . localtime()
+                );
+            &send_mail(%mail);
+        } # end else from if $sock
+
+    } else {
+        &print_top(0,$thisscript,'list error'); #login is actually unknown
+        &print_error("There was an error while adding your domain $new_zone.$new_tld. Please try again later");
+    }
+}
+
+sub lint_ip
+{
+    my $ip = shift;
+    if ($ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+    {
+        my @ip = ($1,$2,$3,$4);
+        foreach my $octet (@ip)
+        {
+            return if ($octet < 0);
+            return if ($octet > 255);
+        }
+        return join('.',@ip);
+    } else {
+        return;
+    }
+}
+
+sub domain_add_verify
+{
+    my ($uid,$zone,$tld,$type,$loginclass) = @_;
+    my $slave = ($type eq "master") ? 0 : 1;
+
+    my ($new_zone,$new_tld) = &verify_new_zone($zone,$tld,$uid);
+    unless ($new_zone && $new_tld)
+    {
+        return;
+    }
+
+    my ($zone_exists,$status) = SQLSelect('cid,status','conf','zone = ' . SQLQuote($new_zone) . ' AND tld = ' . SQLQuote($new_tld) );
+    if ($zone_exists)
+    {
+        &print_top($uid,$thisscript,'list error');
+        if ($status != $config_statuses->{'Active'})
+        {
+            &print_error("<B>Duplicate zone submitted.</B><BR>The domain you submitted ($new_zone.$new_tld) has already beed added to the pending queue on $system_name, and will be auto-matically checked. Please check the domain admin, and click the 'List Pending Domains' link.");
+        } else {
+            &print_error("<B>Duplicate zone submitted.</B><BR>The domain you submitted ($new_zone.$new_tld) has already beed added to $system_name. Please check the domain admin, and click the 'List All Domains' link.");
+        }
+        return;
+    }
+
+    if ($slave)
+    {
+        &print_slave_form($new_zone,$new_tld,$uid);
+    } else {
+        return &domain_add_sql($uid,$zone,$tld,$slave,$loginclass);
+    }
+}
+
+sub print_slave_form
+{
+    my ($zone,$tld,$uid) = @_;
+    &print_top($uid,$thisscript,'add slave');
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_add_slave.tmpl", cache => 1);
+    $tmpl->param(ZONE => $zone);
+    $tmpl->param(TLD => $tld);
+    print $tmpl->output;
+    &print_bottom;
+}
+
+sub verify_new_zone
+{
+    my ($zone,$tld,$uid) = @_;
+
+    $zone =~ s/\s+//g; # remove any whitespace
+
+    my ($new_zone,$new_tld);
+
+    my @valid_tlds_regex;
+    my %valid_tlds;
+    my $get_tlds = IteratedSQLSelect("TLD","tlds","","ORDER BY TLD");
+    while( my ($t_tld) = $get_tlds->fetchrow_array)
+    {
+        push(@valid_tlds_regex,"\Q$t_tld\E");   # push tld, escaped for regex, into array
+        $valid_tlds{lc($t_tld)}++;
+    }
+    $get_tlds->finish;
+    my $valid_tlds_regex = '(' . join('|',@valid_tlds_regex) . ')';
+
+    if ($zone =~ /^([$valid_domain_chars]+)\.$valid_tlds_regex\.?$/i)
+    {   # zone contains the tld in it
+        my $t_zone = lc($1);
+        my $t_tld = lc($2);
+        if ($valid_tlds{$t_tld})
+        {
+            if ($t_zone =~ /\./)
+            {   # check to make sure the redefined zone doesn't contain a period
+                # This bug comes into play if someone submits a zone like:
+                #   dpshell.no-ip.com and tld: com
+                # The valid_tlds passes, but there's still more that
+                # needs checked
+                &print_top($uid,$thisscript,'list error');
+                &print_error("Invalid zone submitted. Subdomains are not supported at this time. If the domain extension you have was not listed on the drop down menu, please contact our support team and let them know.");
+                return;
+            } else {
+                $new_zone = $t_zone;
+                $new_tld = $t_tld;
+            }
+        } else {
+            # shouldn't ever hit this, since we already checked for that.
+            &print_top($uid,$thisscript,'list error');
+            &print_error("Invalid zone submitted. Subdomains are not supported at this time. If the domain extension you have was not listed on the drop down menu, please contact our support team and let them know.");
+            return;
+        }
+    } elsif ($zone =~ /^[$valid_domain_chars]+\.[^\.]+/) {
+        # zone contains period followed by non-period stuff.
+        &print_top($uid,$thisscript,'list error');
+        &print_error("Invalid zone submitted. Subdomains are not supported at this time. If the domain extension you have was not listed on the drop down menu, please contact our support team and let them know.");
+        return;
+    } elsif ( ($zone !~ /^[$valid_domain_chars]+$/) || ($tld !~ /^[$valid_domain_chars]+$/) ) {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("Invalid characters in zone submitted. Please go back an entry a valid domain name.");
+        return;
+    } else {
+        $new_zone = $zone;
+        $new_tld = $tld;
+    }
+
+    return ($new_zone,$new_tld);
+}
+
+sub domain_add
+{
+    my $uid = shift;
+
+    my @tldloop;
+    my $get_tlds = IteratedSQLSelect("TLD","tlds","","ORDER BY orderid,TLD");
+    while( my ($tld) = $get_tlds->fetchrow_array)
+    {
+        push(@tldloop,{TLD => $tld});
+    }
+    $get_tlds->finish;
+
+    &print_top($uid,$thisscript,'add domain');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_add.tmpl", cache => 1);
+    $tmpl->param(SYSTEM_NAME => $system_name);
+    $tmpl->param(POSTSCRIPT => $thisscript);
+    $tmpl->param(TLDLOOP => \@tldloop);
+
+    print $tmpl->output;
+
+    &print_bottom;
+}
+
+sub search
+{
+    my ($domain,$uid,$loginclass) = @_;
+
+    my $s_where;
+    if ($loginclass eq 'admin')
+    {
+        $s_where = "";
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+        $s_where = "ownerid = $conf_ownerid AND ";
+    }
+
+    my @valid_tlds_regex;
+    my %valid_tlds;
+    my $get_tlds = IteratedSQLSelect("TLD","tlds","","ORDER BY TLD");
+    while( my ($t_tld) = $get_tlds->fetchrow_array)
+    {
+        push(@valid_tlds_regex,"\Q$t_tld\E");   # push tld, escaped for regex, into array
+        $valid_tlds{lc($t_tld)}++;
+    }
+    $get_tlds->finish;
+    my $valid_tlds_regex = '(' . join('|',@valid_tlds_regex) . ')';
+
+    my $domain_query = $domain;
+    $domain =~ s/\*+/\*/g;
+    $domain =~ s/\*/\%/g;
+    # remove invalid characters
+    $domain =~ s/[^\%$valid_domain_chars]//g;
+
+    # attempt to find zone and tld in submitted data
+    my ($zone,$tld);
+    if ($domain =~ /^(.+)\.(\%)$/)
+    {   # there's a wildcard at the end.
+        ($zone,$tld) = SQLQuote($1,$2); # dbi's quoting doesn't escape wildcards, so this is safe
+    } else {
+        $domain =~ /^([^\.]+)\.$valid_tlds_regex\.?$/i;
+        ($zone,$tld) = SQLQuote($1,$2); # dbi's quoting doesn't escape wildcards, so this is safe
+    }
+
+    unless ($zone && $tld)
+    {   # no valid tld (or wildcard) that we let on our server in submitted query
+        &print_top($uid,$thisscript,'search error');
+        &print_error("No domains found by query [$domain_query] owned by you.");
+        return;
+    }
+
+    my @matching_domains;
+    my $get_matching_domains = IteratedSQLSelect(
+        "Cid,zone,tld,master",
+        "conf",
+        "$s_where zone like $zone AND tld like $tld AND status = " . $config_statuses->{'Active'},
+        "ORDER BY zone,tld"
+        );
+    while (my ($Cid,$zone,$tld,$master) = $get_matching_domains->fetchrow_array)
+    {
+        push(@matching_domains,[$Cid,$zone,$tld,$master]);
+    }
+    $get_matching_domains->finish;
+
+    unless (@matching_domains)
+    {
+        &print_top($uid,$thisscript,'search error');
+        &print_error("No active domains found by query [$domain_query] owned by you.");
+        return;
+    }
+
+    &print_top($uid,$thisscript,'search results');
+
+    if (1 == @matching_domains)
+    {   # only one result found, print it
+        &output_domain($matching_domains[0]->[0]);
+
+    } else {
+        # more than one found, list them
+        my @domains;
+        foreach my $row (@matching_domains)
+        {
+            my $type;
+            if ($row->[3])
+            {
+                $type = "slave[$row->[3]]";
+            } else {
+                $type = "master";
+            }
+            push(@domains,{
+                DISPLAY => $thisscript . "?action=display\&Cid=$row->[0]",
+                DOMAIN => $row->[1] . "." . $row->[2],
+                TYPE => $type,
+                DELETE => $thisscript . "?action=delete\&Cid=$row->[0]"
+                } );
+        }
+
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_list.tmpl", cache => 1);
+        $tmpl->param(DOMAIN_QUERY => $domain_query);
+        $tmpl->param(DOMAINS => \@domains);
+
+        print $tmpl->output;
+    }
+
+    &print_bottom;
+}
+
+sub display
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$status) = SQLSelect("ownerid,status","conf","Cid = $Cid");
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'list domain');
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub output_domain
+{
+    my $Cid = shift;
+
+    my ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$TTL,$master,$admin_email,$modified) = SQLSelect(
+        "ownerid,zone,tld,serial,refresh,retry,expire,TTL,master,admin_email,modified",
+        "conf",
+        "Cid = $Cid");
+    $admin_email =~ s/\./\@/;
+
+    if ($master)
+    {
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_output_slave.tmpl", cache => 1);
+        $tmpl->param(CID => $Cid);
+        $tmpl->param(DOMAIN => $zone . "." . $tld);
+        $tmpl->param(MODIFIED => $modified);
+        $tmpl->param(MASTER => $master);
+        $tmpl->param(POSTSCRIPT => $modscript);
+        $tmpl->param(DOMAIN_DELETE => $thisscript . "?action=delete\&Cid=$Cid");
+
+        print $tmpl->output;
+        return;
+    }
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_output.tmpl", cache => 1);
+
+    $tmpl->param(CID => $Cid);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(SERIAL => $serial);
+    $tmpl->param(REFRESH => $refresh);
+    $tmpl->param(RETRY => $retry);
+    $tmpl->param(EXPIRE => $expire);
+    $tmpl->param(TTL => $TTL);
+    $tmpl->param(ADMIN_EMAIL => $admin_email);
+    $tmpl->param(MODIFIED => $modified);
+    $tmpl->param(SOA_NAMESERVER => $soa_nameserver);
+
+    $tmpl->param(SOA_EDIT => $thisscript . "?action=soa_edit\&Cid=$Cid");
+    $tmpl->param(DOMAIN_DELETE => $thisscript . "?action=delete\&Cid=$Cid");
+    $tmpl->param(POSTSCRIPT => $thisscript);
+
+    my @records;
+    foreach my $t_type (@type_order)
+    {
+        my @select_stm;
+        if ($t_type eq "A")
+        {
+            @select_stm = ("r.RRid,r.record,r.TTL,CONCAT_WS('.',v.A,v.B,v.C,v.D)","RRs r, RR_A v","r.Cid = $Cid AND r.RRid = v.RRid");
+        } elsif ($t_type eq "MX") {
+            @select_stm = ("r.RRid,r.record,r.TTL,CONCAT_WS(' ',v.pref,v.value)","RRs r, RR_MX v","r.Cid = $Cid AND r.RRid = v.RRid");
+        } elsif ($t_type eq "HINFO") {
+            @select_stm = ("r.RRid,r.record,r.TTL,CONCAT_WS(' ',v.value1,v.value2)","RRs r, RR_HINFO v","r.Cid = $Cid AND r.RRid = v.RRid");
+        } elsif ($t_type eq "PTR") {
+            # not supported, don't think we'll need/want it
+            next;
+        } else {
+            # CNAME, NS, AAAA, or TXT
+            @select_stm = ("r.RRid,r.record,r.TTL,v.value","RRs r, RR_$t_type v","r.Cid = $Cid AND r.RRid = v.RRid");
+        }
+        my $getrecords = IteratedSQLSelect(@select_stm);
+        while (my ($RRid,$record,$rTTL,$value) = $getrecords->fetchrow_array)
+        {
+            push(@records,{
+                EDIT => $thisscript . "?RRid=$RRid\&action=rr_edit",
+                DELETE => $thisscript . "?RRid=$RRid\&action=rr_delete",
+                RECORD => $record,
+                TTL => $rTTL,
+                TYPE => $t_type,
+                VALUE => $value
+                } );
+        }
+        $getrecords->finish;
+    }
+    $tmpl->param(RECORDS => \@records);
+
+    # url redirection shit
+    my @urlredirects;
+    my $geturls = IteratedSQLSelect('urid,url,secure,forwardto,page,cloak,title,keywords,description','urlredirect',"ownerid = $ownerid");
+    while (my ($u_urid,$u_url,$u_secure,$u_forwardto,$u_page,$u_cloak,$u_title,$u_keywords,$u_description) = $geturls->fetchrow_array)
+    {
+        my $full_forwardto = $u_secure ? 'https://' : 'http://';
+        $full_forwardto .= $u_forwardto;
+        if ($u_page =~ /^\//)
+        {
+            $full_forwardto .= $u_page;
+        } elsif ($u_page) {
+            $full_forwardto .= "/" . $u_page;
+        }
+        push(@urlredirects,{
+            EDIT => $thisscript . "?urid=$u_urid\&action=url_edit\&Cid=$Cid",
+            DELETE => $thisscript . "?urid=$u_urid\&action=url_delete\&Cid=$Cid",
+            URL     => $u_url,
+            FORWARDTO   => $full_forwardto,
+            CLOAK   => $u_cloak,
+            TITLE   => $u_title,
+            KEYWORDS    => $u_keywords,
+            DESCRIPTION => $u_description
+            } );
+    }
+    $geturls->finish;
+    $tmpl->param(URLREDIRECTS => \@urlredirects);
+
+    print $tmpl->output;
+}
+
+sub soa_edit
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$TTL,$admin_email,$status) = SQLSelect(
+        "ownerid,zone,tld,serial,refresh,retry,expire,TTL,admin_email,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    $admin_email =~ s/\./\@/;
+
+    &print_top($uid,$thisscript,'modify SOA');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/soa_edit.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(CID => $Cid);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(SERIAL => $serial);
+    $tmpl->param(REFRESH => $refresh);
+    $tmpl->param(RETRY => $retry);
+    $tmpl->param(EXPIRE => $expire);
+    $tmpl->param(TTL => $TTL);
+    $tmpl->param(ADMIN_EMAIL => $admin_email);
+
+    print $tmpl->output;
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub rr_add
+{
+    my ($Cid,$uid,$type,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$status) = SQLSelect(
+        "ownerid,zone,tld,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'add resource record');
+
+    my $max_record_length = 255 - length(".$zone.$tld.");
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/rr_add.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(CID => $Cid);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(MAX_RECORD_LENGTH => $max_record_length);
+    $tmpl->param(TYPE => $type);
+
+    # types: A, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        $tmpl->param(TYPE_A => 1);
+    } elsif ( $type eq "AAAA") {
+        $tmpl->param(TYPE_AAAA => 1);
+    } elsif ( $type =~ /^(TXT|CNAME|NS)$/ ) {
+        $tmpl->param(TYPE_OTHER => 1);
+    } elsif ( $type eq "MX" ) {
+        $tmpl->param(TYPE_MX => 1);
+    } elsif ( $type eq "HINFO" ) {
+        $tmpl->param(TYPE_HINFO => 1);
+    }
+
+    print $tmpl->output;
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub url_delete
+{
+    my ($urid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$url,$secure,$forwardto,$page,$cloak,$title,$keywords,$description) = SQLSelect(
+        "ownerid,url,secure,forwardto,page,cloak,title,keywords,description",
+        "urlredirect",
+        "urid = $urid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $urid owned by you.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $urid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'url delete');
+
+    my $full_forwardto = $secure ? 'https://' : 'http://';
+    $full_forwardto .= $forwardto;
+    if ($page =~ /^\//)
+    {
+        $full_forwardto .= $page;
+    } elsif ($page) {
+        $full_forwardto .= "/" . $page;
+    }
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/url_delete.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Q::Cid");
+    $tmpl->param(CID => $Q::Cid);
+    $tmpl->param(URID => $urid);
+    $tmpl->param(URL => $url);
+    $tmpl->param(FORWARDTO => $full_forwardto);
+    $tmpl->param(CLOAK => $cloak);
+    $tmpl->param(TITLE => $title);
+    $tmpl->param(KEYWORDS => $keywords);
+    $tmpl->param(DESCRIPTION => $description);
+
+    print $tmpl->output;
+
+    my ($cid_ownerid,$status) = SQLSelect("ownerid,status","conf","Cid = $Q::Cid");
+    &output_domain($Q::Cid) if ( (($cid_ownerid == $ownerid) && ($status == $config_statuses->{'Active'})) || ($loginclass eq 'admin') );
+
+    &print_bottom;
+}
+
+sub rr_delete
+{
+    my ($RRid,$uid,$loginclass) = @_;
+
+    my ($status,$ownerid,$zone,$tld,$Cid,$record,$TTL,$type) = SQLSelect(
+        "c.status,c.ownerid,c.zone,c.tld,r.Cid,r.record,r.TTL,r.type",
+        "RRs r, conf c",
+        "r.RRid = $RRid AND r.Cid = c.Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $RRid owned by you.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain record found by id $RRid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'resource record delete');
+
+    my $full_record;
+    if ($record =~ /$zone\.$tld\.$/i)
+    {   # terminated with domain
+        $full_record = $record;
+    } else {
+        $full_record = $record . $zone . "." . $tld . ".";
+    }
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/rr_delete.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(RRID => $RRid);
+    $tmpl->param(FULLRECORD => $full_record);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(TTL => $TTL);
+    $tmpl->param(TYPE => $type);
+
+    # types: A, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        my ($A,$B,$C,$D) = SQLSelect("A,B,C,D","RR_A","RRid = $RRid");
+        $tmpl->param(TYPE_A => 1);
+        $tmpl->param(A => $A);
+        $tmpl->param(B => $B);
+        $tmpl->param(C => $C);
+        $tmpl->param(D => $D);
+    } elsif ( $type =~ /^(TXT|CNAME|NS|AAAA)$/ ) {
+        my ($value) = SQLSelect("value","RR_$type","RRid = $RRid");
+        $tmpl->param(TYPE_OTHER => 1);
+        $tmpl->param(VALUE => $value);
+    } elsif ( $type eq "MX" ) {
+        my ($pref,$value) = SQLSelect("pref,value","RR_MX","RRid = $RRid");
+        $tmpl->param(TYPE_MX => 1);
+        $tmpl->param(PREF => $pref);
+        $tmpl->param(VALUE => $value);
+    } elsif ( $type eq "HINFO" ) {
+        my ($val1,$val2) = SQLSelect("value1,value2","RR_HINFO","RRid = $RRid");
+        $tmpl->param(TYPE_HINFO => 1);
+        $tmpl->param(VAL1 => $val1);
+        $tmpl->param(VAL2 => $val2);
+    }
+
+    print $tmpl->output;
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub url_edit
+{
+    my ($urid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$url,$secure,$forwardto,$page,$cloak,$title,$keywords,$description) = SQLSelect(
+        "ownerid,url,secure,forwardto,page,cloak,title,keywords,description",
+        "urlredirect",
+        "urid = $urid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $urid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $urid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'url edit');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/url_edit.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Q::Cid");
+    $tmpl->param(URID => $urid);
+    $tmpl->param(CID => $Q::Cid);
+    $tmpl->param(URL => $url);
+    $tmpl->param(SECURE => $secure);
+    $tmpl->param(FORWARDTO => $forwardto);
+    $tmpl->param(PAGE => $page);
+    $tmpl->param(CLOAK => $cloak);
+    $tmpl->param(TITLE => $title);
+    $tmpl->param(KEYWORDS => $keywords);
+    $tmpl->param(DESCRIPTION => $description);
+
+    print $tmpl->output;
+
+    my ($cid_ownerid,$status) = SQLSelect("ownerid,status","conf","Cid = $Q::Cid");
+    &output_domain($Q::Cid) if ( (($cid_ownerid == $ownerid) && ($status == $config_statuses->{'Active'})) || ($loginclass eq 'admin') );
+
+    &print_bottom;
+}
+
+sub rr_edit
+{
+    my ($RRid,$uid,$loginclass) = @_;
+
+    my ($status,$ownerid,$zone,$tld,$Cid,$record,$TTL,$type) = SQLSelect(
+        "c.status,c.ownerid,c.zone,c.tld,r.Cid,r.record,r.TTL,r.type",
+        "RRs r, conf c",
+        "r.RRid = $RRid AND r.Cid = c.Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No record found by id $RRid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript,'list error');
+            &print_error("No active domain record found by id $RRid owned by you.");
+            return;
+        }
+    }
+
+    &print_top($uid,$thisscript,'resource record edit');
+
+    my $short_record = $record;
+    $short_record =~ s/\.?$zone\.$tld\.$//;
+    my $max_record_length = 255 - length(".$zone.$tld.");
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/rr_edit.tmpl", cache => 1);
+    $tmpl->param(POSTSCRIPT => $modscript);
+    $tmpl->param(CANCEL => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(RRID => $RRid);
+    $tmpl->param(RECORD => $short_record);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(MAX_RECORD_LENGTH => $max_record_length);
+    $tmpl->param(TTL => $TTL);
+    $tmpl->param(TYPE => $type);
+
+    # types: A, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        my ($A,$B,$C,$D) = SQLSelect("A,B,C,D","RR_A","RRid = $RRid");
+        $tmpl->param(TYPE_A => 1);
+        $tmpl->param(A => $A);
+        $tmpl->param(B => $B);
+        $tmpl->param(C => $C);
+        $tmpl->param(D => $D);
+    } elsif ( $type eq "AAAA" ) {
+        my ($value) = SQLSelect("value","RR_$type","RRid = $RRid");
+        $tmpl->param(TYPE_AAAA => 1);
+        $tmpl->param(VALUE => $value);
+    } elsif ( $type =~ /^(TXT|CNAME|NS)$/ ) {
+        my ($value) = SQLSelect("value","RR_$type","RRid = $RRid");
+        $tmpl->param(TYPE_OTHER => 1);
+        $tmpl->param(VALUE => $value);
+    } elsif ( $type eq "MX" ) {
+        my ($pref,$value) = SQLSelect("pref,value","RR_MX","RRid = $RRid");
+        $tmpl->param(TYPE_MX => 1);
+        $tmpl->param(PREF => $pref);
+        $tmpl->param(VALUE => $value);
+    } elsif ( $type eq "HINFO" ) {
+        my ($val1,$val2) = SQLSelect("value1,value2","RR_HINFO","RRid = $RRid");
+        $tmpl->param(TYPE_HINFO => 1);
+        $tmpl->param(VAL1 => $val1);
+        $tmpl->param(VAL2 => $val2);
+    }
+
+    print $tmpl->output;
+
+    &output_domain($Cid);
+
+    &print_bottom;
+}
+
+sub domain_delete
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email);
+    if ($loginclass eq 'admin')
+    {
+        ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email) = SQLSelect(
+            "c.ownerid,c.zone,c.tld,c.serial,c.refresh,c.retry,c.expire,c.TTL,c.master,c.admin_email",
+            "conf c",
+            "c.Cid = $Cid"
+            );
+    } else {
+        ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email) = SQLSelect(
+            "c.ownerid,c.zone,c.tld,c.serial,c.refresh,c.retry,c.expire,c.TTL,c.master,c.admin_email",
+            "conf c, logins l",
+            "c.Cid = $Cid AND c.ownerid = l.ownerid AND l.uid = $uid"
+            );
+    }
+
+    unless ($zone)
+    {
+        &print_top($uid,$thisscript,'list error');
+        &print_error("No domain found by id $Cid owned by you.");
+        return;
+    }
+
+    my @login_emails;
+    my $get_login_emails = IteratedSQLSelect("login","logins","ownerid = $ownerid");
+    while (my ($email) = $get_login_emails->fetchrow_array)
+    {
+        push(@login_emails,{EMAIL => $email});
+    }
+    $get_login_emails->finish;
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/domain_delete.tmpl", cache => 1);
+    $tmpl->param(DOMAIN => $zone . "." . $tld);
+    $tmpl->param(YES => $modscript . "?action=delete\&Cid=$Cid");
+    $tmpl->param(NO => $thisscript . "?action=display\&Cid=$Cid");
+    $tmpl->param(LOGIN_EMAIL => \@login_emails);
+
+    &print_top($uid,$thisscript,'domain delete');
+    print $tmpl->output;
+
+    &print_bottom;
+}
+
+sub default
+{
+    my $uid = shift;
+
+    &print_top($uid,$thisscript,'list');
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/list_index.tmpl", cache => 1);
+    print $tmpl->output;
+    &print_bottom;
+}

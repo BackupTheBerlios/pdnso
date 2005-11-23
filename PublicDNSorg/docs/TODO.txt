@@ -1,0 +1,89 @@
+TODO
+
+This is by no means an exhaustive list of all todo items... just some
+important ones to note.
+
+--------------------------------------------------------------------------------
+UNIFY PRIVACY POLICY LINKS
+--------------------------
+The privacy policy is linked to as both /index.html?section=privacypolicy and
+/privacypolicy.htm. Need to unify them.
+
+--------------------------------------------------------------------------------
+AUDIT FOR NON-RELATIVE LINKS
+----------------------------
+The system needs an audit to search for any links that begin with a slash "/".
+They'll need updated with a relative link. Most (maybe all of them) were 
+removed after a grep for '=/' and '="/', but there could be others still
+there.
+
+--------------------------------------------------------------------------------
+RE-WRITE process.htm
+--------------------
+This script currently is NOT linked to, but has a good overview of how the 
+system works. Re-write it as a template, and link it from the help section
+or something.
+
+--------------------------------------------------------------------------------
+Documentation
+-------------
+Document the backend and frontend more completely, especially the individual
+scripts.
+
+--------------------------------------------------------------------------------
+ABSTRACT TIMESPANS
+------------------
+Move all timespans to the config, like, how long a pending domains stay in
+queue.
+Move minimum times for SOA records into the config (add a validation check to
+PublicDNS::Utils.pm).
+
+--------------------------------------------------------------------------------
+REFACTOR UTILS
+--------------
+There are a lot of calls that should be factored out to utility modules.
+Sub check_roots() (from check_pending_domains.cron and test_domain.pl).
+All daemon calls should go through a module w/ an API.
+Sub delete_domain() from find_lame_domains.cron (and from the frontend equiv).
+
+--------------------------------------------------------------------------------
+DATA VALIDATION
+---------------
+Some of the library subroutines could use some data validation. eg. pdsysd.pl
+sub addzonefile() should check that $pdinput is an array ref.
+
+--------------------------------------------------------------------------------
+FRONT END UTILITY VALIDATION
+----------------------------
+Add value checking to value side of add's/mod's (so they don't leave off
+period and such) (we may already have this one done, needs verified)
+
+--------------------------------------------------------------------------------
+COOKIE REFACTORING
+------------------
+Cookies - check if they are accepting them solution: From all pages (possibly
+just modifying out auth login routine) set an additional cookie
+"has_cookie_support". Then, when checking re-authentication, if that isn't
+set, then they haven't been to any pages at all or aren't accepting cookies.
+We can then figure out from the lack of that cookie and checking out existing
+sessions whether or not they accept cookies, and respond accordingly
+
+--------------------------------------------------------------------------------
+TZ SUPPORT
+----------
+There are some hardcoded TZ specific things within the code. For example, 
+in url_redirect.d, it has a REALLY broken chunk of code:
+
+    my ($sec,$min,$hr,$day,$mon,$year) = localtime(time + (5*60*60)); # adjust to GMT
+
+It's doesn't really break anything, but it's just wrong.
+
+--------------------------------------------------------------------------------
+URL REDIRECT APACHE MODULE
+--------------------------
+Instead of running a separate daemon to handle url redirects, which requires
+its own IP, an apache module could be a nice alternative. I'd want to keep
+both active, as the standalone one would still work if the user wasn't running
+apache.
+
+--------------------------------------------------------------------------------

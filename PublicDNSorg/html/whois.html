@@ -1,0 +1,122 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/whois.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+whois.html - Public-DNS.org whois search form.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use Net::XWhois;
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+#   if ($status <= 0)
+#   {
+#       &print_top(0);
+#       &print_error("Not Logged In.");
+#       return;
+#   }
+
+    if ($Q::search && $Q::domain)
+    {
+        &default($uid,1,$Q::domain);
+    } else {
+        &default($uid);
+    }
+}
+
+
+sub default
+{
+    my $uid = shift;
+    my $search = shift;
+    my $domain = shift;
+    &print_top($uid,$thisscript,'whois proxy');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . "/whois.tmpl", cache => 1);
+
+    if ($domain) { $tmpl->param(QUERY => $domain); }
+
+    $domain =~ s/[^a-zA-Z0-9\.-]//g;
+    if ($search && ($domain =~ /^\S\S+\.\S\S+$/) )
+    {
+# fully qualified function name 'main::myerror' doesn't work in mod_perl environment
+#       my $whois = new Net::XWhois( Domain => $domain, Nocache => 1, Error => 'main::myerror' );
+        my $whois = new Net::XWhois( Domain => $domain, Nocache => 1, Error => 'ignore' );
+        unless ($whois)
+        {
+            &myerror;
+            warn "whois didn't define, should spit out error\n";
+            return;
+        }
+        my $responce = $whois->response();
+        if ( (!$responce) || $whois->not_registered  )
+        {
+            $tmpl->param(RESULTS => "No record matching query: [$domain]");
+        } else {
+            $tmpl->param(RESULTS => $responce);
+        }
+    } elsif ($search) {
+        $tmpl->param(RESULTS => "No record matching blank query found.");
+    }
+
+    print $tmpl->output;
+
+    &print_bottom;
+}
+
+sub myerror
+{
+    &print_error("Network error. Unable to access whois server.\n");
+}

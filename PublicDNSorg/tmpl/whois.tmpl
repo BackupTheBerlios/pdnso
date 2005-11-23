@@ -1,0 +1,22 @@
+<BR>
+<B>Public-DNS Whois Proxy Interface</B><BR>
+<BR>
+"<B>Whois</B>" is utility that allows one to query domain registar databases to lookup registration data for domains. It can allow you to find out who owns a domain, and if a domain is registered.
+<BR>
+<BR>
+The data recieved from Purified Data, LLC's WHOIS proxy is provided "as is", with no guarantee or warranties regarding its accuracy.<BR>
+This information is provided for the sole purpose of assisting you in obtaining information about domain name registration records. Limitations imposed by various whois registries remain in effect.<BR>
+<BR>
+<FORM METHOD=post><INPUT TYPE=hidden name=search value=1>
+Please enter a domain name to search for:<INPUT TYPE=text size=50 name=domain><BR>
+<I>(domain should be a second level domain. Do not include http:// nor the www. For example, the domain for http://www.public-dns.org is public-dns.org)</I>
+<BR>
+<BR>
+<TMPL_IF QUERY><HR>Query: <TMPL_VAR NAME=QUERY></TMPL_IF>
+<TMPL_IF RESULTS>
+<HR>
+<PRE><TMPL_VAR NAME=RESULTS></PRE>
+<HR>
+<BR><BR>
+</TMPL_IF>
+

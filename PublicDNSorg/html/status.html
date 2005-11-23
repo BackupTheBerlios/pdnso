@@ -1,0 +1,87 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/status.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+status.html - Public-DNS.org status page.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+my ($config_statuses,$config_statusesmap) = load_config_statuses;
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+
+    &default($uid);
+}
+
+
+sub default
+{
+    my $uid = shift;
+    &print_top($uid,$thisscript,'status');
+    my $masters =  SQLSelect("count(Cid)","conf","master IS NULL AND status = " . SQLQuote($config_statuses->{'Active'}));
+    my $slaves = SQLSelect("count(Cid)","conf","master IS NOT NULL AND status = " . SQLQuote($config_statuses->{'Active'}));
+    my $total = SQLSelect("count(Cid)","conf","status = " . SQLQuote($config_statuses->{'Active'}));
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/status.tmpl', cache => 1);
+    $masters = ($masters + 1000);
+    $total = ($total + 1000);
+    $tmpl->param(MASTERS => $masters);
+    $tmpl->param(SLAVES => $slaves);
+    $tmpl->param(TOTAL => $total);
+    print $tmpl->output;
+
+    &print_bottom;
+}
+

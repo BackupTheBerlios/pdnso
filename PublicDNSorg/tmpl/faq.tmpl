@@ -1,0 +1,629 @@
+<A name=#top > </A>
+<BR>
+<Center><H2><TMPL_VAR NAME=SYSTEM_NAME> FAQ</H2></Center>
+<UL>
+	<H3>Questions about records?</H3>
+	<UL>
+	<A class=blackonwhite HREF=#recordA >What is an <B>A</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordMX >What is a <B>MX</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordCNAME >What is a <B>CNAME</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordNS >What is an <B>NS</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordTXT >What is a <B>TXT</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordHINFO >What is an <B>HINFO</B> record?</A><BR>
+	<A class=blackonwhite HREF=#recordOTHER >What about other record types?</A><BR>
+	<A class=blackonwhite HREF=#recordURL>Why can't I add a URL forwarder for "yourdomain.com"?</A><BR>
+	</UL>
+</UL>
+<BR>
+<UL>
+	<H3>General Question?</H3>
+	<UL>
+		<A class=blackonwhite HREF=#howmoddomain >How do I modify a domain?</A><BR>
+		<A class=blackonwhite HREF=#howdeldomain >How do I delete a domain?</A><BR>
+		<A class=blackonwhite HREF=#newdomainadd >How do I add a new domain?</A><BR>
+		<A class=blackonwhite HREF=#howaddsecondary >How do I add secondaries?</A><BR>
+		<A class=blackonwhite HREF=#howmodifyrecord >How do I modify a host entry?</A><BR>
+		<A class=blackonwhite HREF=#howdeleterecord >How do I delete a host entry?</A><BR>
+		<A class=blackonwhite HREF=#howmail >How do I set up mail?</A><BR>
+		<A class=blackonwhite HREF=#howconfirmdomain >How do I know my domain addition worked?</A><BR>
+		<A class=blackonwhite HREF=#howconfirmrecord >How do I know my modifications worked?</A><BR>
+		<A class=blackonwhite HREF=#howlongpropagate >How long does it take for a change to be effective?</A><BR>
+		<A class=blackonwhite HREF=#howlongpropagate >How long does it take for a domain to propagate?</A><BR>
+		<A class=blackonwhite HREF=#newdomainregister >How do I register a new domain?</A><BR>
+		<A class=blackonwhite HREF=#newdomainadd >How do I add a new domain to <TMPL_VAR NAME=SYSTEM_NAME>?</A><BR>
+		<A class=blackonwhite HREF=#primarysecondary >What are primary and secondary domains?</A><BR>
+	</UL>
+</UL>
+<BR>
+<UL>
+	<H3>Technical Question?</H3>
+	<UL>
+		<A class=blackonwhite HREF=#preregistrar >My registrar requires the DNS servers to be configured with my domain before I can point it to those DNS servers. What do I do?</A><BR>
+		<A class=blackonwhite HREF=#logininfo >I don't have a login, or I forgot my login or password. What do I do?</A><BR>
+		<A class=blackonwhite HREF=#email >How do I change my e-mail address / loginID</A><BR>
+		<A class=blackonwhite HREF=#cookies >I can login, but when I click on anything it says "Error: Not logged in". What is wrong??</A><BR>
+		<A class=blackonwhite HREF=#loginremoveinfo >How do I remove my account?</A><BR>
+		<A class=blackonwhite HREF=#dotdk >Why does my domain delegation for my .dk domain fail with an error of "domainservers aren't registered DK Hostmaster A/S"?</A><BR>
+	</UL>
+</UL>
+<BR>
+	<HR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=newdomainregister><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I register a new domain?</B><BR>
+<BLOCKQUOTE>
+
+The first step to registering a new domain name, is finding out what is available.<BR>
+<BR>
+You can do that from any of the registrar's sites via their "whois" utilities. The domain registrars are the sites/companies that are responsible for keeping track of who has what domains, and billing people for them. Here's a list of some common registrars:
+<UL><LI><A class=blackonwhite HREF=http://www.networksolutions.com>Network Solutions</A> Offering domains for $35
+    <LI><A class=blackonwhite HREF=http://www.register.com>Register.com</A> Offering domains for $35
+    <LI><A class=blackonwhite HREF=http://www.godaddy.com>godaddy.com</A> Offering domains for $8.95
+</UL>
+You'll also need to register the domain with one of them. In the process of doing so, you'll need to give them "name server addresses". Our name server addresses are:
+<UL><TMPL_LOOP DNS_SERVERS>
+    <LI><TMPL_VAR NAME=FQDN>	<TMPL_VAR NAME=IP></TMPL_LOOP>
+</UL>
+Once it's registered, you can <A class=blackonwhite HREF=#newdomainadd >add your domain to the system.</A>
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=newdomainadd><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I add a new domain to <TMPL_VAR NAME=SYSTEM_NAME> ?</B><BR>
+<BLOCKQUOTE>
+
+To add a domain to <TMPL_VAR NAME=SYSTEM_NAME>:
+Go to <A class=blackonwhite HREF=signup.html>signup.html</A>,<BR>
+Login with your <A class=blackonwhite HREF=#logininfo>E-mail Address  and password</A>,<BR>
+Click "Add Domain"<BR>
+Enter your domain name. If we are going to just be doing secondaries for you, select "<TMPL_VAR NAME=SYSTEM_NAME> is a zone slave" from the drop down menu, otherwise select "<TMPL_VAR NAME=SYSTEM_NAME> is zone master". If you don't know which it should be, you're probably safe to go with "<TMPL_VAR NAME=SYSTEM_NAME> is zone master". If you want, you can check <A class=blackonwhite HREF=#primarysecondary>the FAQ question on the difference between primaries and secondaries.</A><BR>
+Click Add.<BR>
+If you added it as a secondary, you will also need to provide the IP address of your master name server.<BR>
+<BR>
+Your domain will then be added to the "Pending Domains" area. You can view the domains you have pending for addition by clicking the "List Pending Domains" link. Your domain will be automatically checked every 15 minutes to see if it's valid, and the information in Pending Domains will be updated.<BR>
+For a domain to be valid, the internet's root name servers must point it's NS records to our name servers:
+<UL><TMPL_LOOP DNS_SERVERS>
+    <LI><TMPL_VAR NAME=FQDN>	<TMPL_VAR NAME=IP></TMPL_LOOP>
+</UL>
+You will be e-mailed upon any changes to it's status. If the domain sits in the Pending queue for more than one week, it will automatically be removed. You may re-add it at any time to have it checked again.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=cookies><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>I can login, but when I click on anything it says "Error: Not logged in". What is wrong?</B><BR>
+<BLOCKQUOTE>
+Our current authentication system requires that cookies be enabled. It will still allow you to login with cookies disabled, but you won't get past the page you logged into.<BR>
+Please make sure you have cookies enabled. There have been several cases where the users browser also had to be restarted (exit the web browser, and start it back up). If you are sure cookies are working correctly on your browser and you continue to get that error, please contact our support team at:<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<A class=blackonwhite HREF=index.html?section=contact>Contact Us</A>
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=loginremoveinfo><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I remove my account?</B><BR>
+<BLOCKQUOTE>
+Inactive logins (logins not associated with any active domains) will automatically be removed after 30 days on inactivity. Users who have added domains will need to remove those domains from our service before the login can be removed.
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=logininfo><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>I don't have a login, or I forgot my login or password. What do I do?</B><BR>
+<BLOCKQUOTE>
+<UL>
+<B>I don't have a login</B>
+	<UL>- Go to <A class=blackonwhite HREF=signup.html>signup.html</A></UL>
+	<BR>
+
+<B>I forgot my login or password</B>
+	<UL>- Your Login Id is your e-mail address.<BR>
+		- Forgot Password <A class=blackonwhite HREF=index.html?section=forgotpassword>Click Here</A>
+	</UL>
+</UL>
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=email><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I change my e-mail address / LoginID</B><BR>
+<BLOCKQUOTE>
+
+Login with your old email address / LoginID. Click on the e-mail address on the toolbar in the top right hand corner. That will take you to a page where you can update your password and update your e-mail address. Or you can just <A class=blackonwhite HREF=list.html?action=chpasswd>Click Here</A>
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+<A name=primarysecondary><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What are primary and secondary domains?</B><BR>
+<BLOCKQUOTE>
+
+Generally, domain names are hosted on more than one name server. Hosted meaning the name to IP address mappings are stored on those servers... don't confuse this with web site hosting, that's a separate service entirely. DNS points the names to IP addresses, where a web site, or ftp, or e-mail server might be sitting.<BR>
+<BR>
+When a domain name is on multiple servers, one of the servers acts as a "Primary" or "Master" server. The other servers are then called "Slaves" or "Secondary" servers.<BR>
+The Primary server holds all the configuration information for the domain. Whenever changes need made, they are only made to the Primary server.<BR>
+The Slave's pull information about the records off of the Primary server, keeping their records up to date.<BR>
+<BR>
+To the rest of the world, they look and act identically. It's just a matter of what server holds all the configuration data.<BR>
+<BR>
+If we just do secondaries for a domain, then someone else must have a master server configured out there with all the records for us to pull the information off of.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+
+	
+<A name=recordA><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is an <B>A</B> record?</B><BR>
+<BLOCKQUOTE>
+
+"A" for <B>A</B>ddress.<BR>
+An "A" record is a DNS record that points a domain name (like joe.foo.bar.com.) to an ip address (like 192.168.0.78).<BR>
+ex.<BR>
+&nbsp;&nbsp;&nbsp;joe.foo.bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;192.168.0.78
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordMX><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is a <B>MX</B> record?</A></B><BR>
+<BLOCKQUOTE>
+
+"MX" for <B>M</B>ail e<B>X</B>changer<BR>
+An "MX" record is a DNS record that defines the domain name (like mail.foo.bar.com.) that mail should go to for a domain (like bar.com).<BR>
+ex.<BR>
+&nbsp;&nbsp;&nbsp;bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;10&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mail.foo.bar.com.<BR>
+&nbsp;&nbsp;&nbsp;bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;20&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;backup.foo.bar.com.<BR>
+would send all mail going to <I>addresses</I>@bar.com to the mail server mail.foo.bar.com unless it is unavailable, then it would try sending it to backup.foo.bar.com because backup.foo.bar.com has a higher preference (20) than mail.foo.bar.com (10). The lower the number in the preference, the higher the priority that server has.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordCNAME><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is a <B>CNAME</B> record?</A></B><BR>
+<BLOCKQUOTE>
+
+"CNAME" for <B>C</B>anonical <B>Name</B><BR>
+A CNAME record is a DNS record that points a domain name (like ftp.foo.bar.) to another domain name (like www.foo.bar.). It allows you to make aliases from one domain record to another. You can also cross over domains by pointing a record (like ftp.foo.bar.) to some other domain (like ftp.domain.com.).<BR>
+Important to note though, the records that CNAME's point to MUST be <A class=blackonwhite HREF=#recordA >"A" records</A>.<BR>
+ex.<BR>
+&nbsp;&nbsp;&nbsp;ftp.foo.bar.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CNAME&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ftp.domain.com.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordNS><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is an <B>NS</B> record?</A></B><BR>
+<BLOCKQUOTE>
+
+"NS" for <B>N</B>ame <B>S</B>erver<BR>
+An NS record is a DNS record that tells the DNS servers in the world what DNS servers are authoritative for a domain. If we are the master name server, generally all that needs listed is:
+<PRE><TMPL_LOOP DNS_SERVERS>yourdomain.com.	NS	<TMPL_VAR NAME=FQDN>.
+</TMPL_LOOP></PRE>
+There are other uses, such as delegation of subdomains, but those are outside the scope of this FAQ. If you need them, you'll likely already know what they are. The above records should be appropriate for about 98% of the domains we are doing primary DNS for.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordTXT><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is a <B>TXT</B> record?</A></B><BR>
+<BLOCKQUOTE>
+
+"TXT" for <B>T</B>e<B>XT</B><BR>
+A TXT record is a DNS record that enables you to point a domain record (like notes.foo.bar.com.) to any piece of text (under 255 characters) that you want (like "this domain is owned by my company, bar.com")<BR>
+ex.<BR>
+&nbsp;&nbsp;&nbsp;notes.foo.bar.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"This domain is owned by my company, bar.com"
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordHINFO><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What is an <B>HINFO</B> record?</B><BR>
+<BLOCKQUOTE>
+
+"HINFO" for <B>H</B>ost <B>INFO</B><BR>
+An HINFO record is a DNS record that enables you to point a domain record (like printer.foo.bar.com.) to information about a host. Their are two information fields, both of max length of 255 characters, and you can put whatever you want in them. It's like the <A class=blackonwhite HREF=#recordTXT>TXT</A> records, but has an extra field, and was developed for different reasons (originally, there were no <A HREF=#recordMX>MX</A> records, so HINFO records were used to determine where someone's mail server was at).<BR>
+ex.<BR>
+&nbsp;&nbsp;&nbsp;printer.foo.bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;HINFO&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"printer service" "port 257"
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordURL><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>Why can't I add a URL forwarder for "yourdomain.com"?</B><BR>
+<BLOCKQUOTE>
+
+URL Forwarding needs a zone record pointing to our redirect server (<TMPL_VAR NAME=REDIRECT_HOSTNAME>). The appropriate record would be a CNAME, like:<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;yourdomain.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CNAME&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<TMPL_VAR NAME=REDIRECT_HOSTNAME>.<BR>
+<BR>
+The problems lies in the limits of dns zones. When you add a zone, like "yourdomain.com", there MUST be an <B>A</B> record for "yourdomain.com".<BR>
+<B>CNAME</B> records are not allowed to be added if a duplicate <B>A</B> record exists.<BR>
+<BR>
+So, we're unable to provide a URL forwarder for the base record for your zone.<BR>
+<BR>
+You can, however, add as many subdomain URL forwarder records as you like (ex. www.yourdomain.com, ftp.yourdomain.com, mysite.yourdomain.com, etc).
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=recordOTHER><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>What about other record types?</B><BR>
+<BLOCKQUOTE>
+
+There are other records type beyond what our service allows you to administer. At this time, we doesn't support them. If you need to add some other type of record, please let us know. At the time we implemented this service, the types we currently support covered all the records we have ever had added to domains on our servers (no one has ever requested any other types of records). So, if you need support for some other type, let us know and I'm sure we'll be able to work something out, or extend the support offered.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+
+	
+<A name=howmail><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I set up mail?</B><BR>
+<BLOCKQUOTE>
+
+Mail setup entails a lot of pieces working together to function. DNS is one of the pieces that needs to be setup correctly.<BR><BR>
+In DNS, <A class=blackonwhite HREF=#recordMX><B>MX</B> records</A> are the ones that take care of e-mail. MX stands for <B>M</B>ail e<B>X</B>changer.<BR>
+To setup an MX record (assuming your domain was "bar.com"):
+	<BLOCKQUOTE>
+	go into <TMPL_VAR NAME=ROOT_URI> <BR>
+	add a new record of type "A" for your domain.<BR>
+	the "record" field should say something like "mail.bar.com.", and the ip address it points to should be the IP address of your mail server, or the mail server that will be handling mail for your domain.<BR>
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;eg.&nbsp;&nbsp;&nbsp;mail.bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;123.123.123.45<BR>
+	Now add a new record of type "MX" for your domain.<BR>
+	If you domain was "bar.com" and you want to set up DNS to handle e-mail addresses like "foo@bar.com" or "bob@bar.com", set the "record" field to your domain (like "bar.com."), and the "value" field to the name you used for the "A" record you just set up.<BR>
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;eg.&nbsp;&nbsp;&nbsp;bar.com.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MX&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;10&nbsp;&nbsp;mail.bar.com.</BLOCKQUOTE>
+MX records also have a "preferance" field. The preferance field allows you to set up multiple mail servers to receive e-mail, and give each a preferance. For example, you could have the following:
+<PRE>	bar.com.	MX	10	mail1.bar.com.
+	bar.com.	MX	20	mail2.bar.com.
+	bar.com.	MX	30	smtp.somewhere.else.net.</PRE>
+Mail would then be sent to mail1.bar.com by default. If mail1.bar.com was down, mail would then go to mail2.bar.com, unless it was also down, then it would go to smtp.somewhere.else.net. If all three mail servers were down, mail would bounce back to the sender.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howmoddomain><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I modify a domain?</B><BR>
+<BLOCKQUOTE>
+
+To modify a domain, go into <TMPL_VAR NAME=ROOT_URI>,<BR>
+Click on "List All Domains",
+select the domain you would like to modify from the list<BR>
+<BR>
+You will then be looking at all the zone records for the domain.<BR>
+You can use any of the edit, add record, or delete links to modify records in the domain.
+
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howdeldomain><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I delete a domain?</B><BR>
+<BLOCKQUOTE>
+
+To delete a domain, go into <TMPL_VAR NAME=ROOT_URI>,<BR>
+Click on "List All Domains",<BR>
+Find the Domain you want to delete and click the link on the right that say "Delete",<BR>
+
+<BR>
+You will be prompted to confirm the deletion of the domain.<BR>
+Select "Yes" if you want to delete it, or select "No" to return to the main menu.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howaddsecondary><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I add secondaries?</B><BR>
+<BLOCKQUOTE>
+
+To add a domain as a secondary, select "Add Domain".<BR>
+Enter the domain you would like to add, as the type select "<TMPL_VAR NAME=SYSTEM_NAME> is a zone slave", and click "Add Domain"<BR>
+You will then be prompted for the Master IP address. This should be the IP address of the master domain server that we will be pulling DNS configuration information from for this domain. <B>This must be an IP address, not a domain name</B><BR>
+<BR>
+Your domain will then be added to the "Pending Domains" area. You can view the domains you have pending for addition by clicking the "List Pending Domains" link. Your domain will be automatically checked every 15 minutes to see if it's valid, and the information in Pending Domains will be updated.<BR>
+For a domain to be valid, the internet's root name servers must point it's NS records to our name servers:
+<UL><TMPL_LOOP DNS_SERVERS>
+    <LI><TMPL_VAR NAME=FQDN>	<TMPL_VAR NAME=IP></TMPL_LOOP>
+</UL>
+You will be e-mailed upon any changes to it's status. If the domain sits in the Pending queue for more than one week, it will automatically be removed. You may re-add it at any time to have it checked again.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howmodifyrecord><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I modify a host entry?</B><BR>
+<BLOCKQUOTE>
+
+To modify a host entry, select your domain from "List All Domains". <BR>
+Find the host entry you would like to edit in the domain listing, and click edit next to it.<BR>
+You can then change the values that show up in the "Edit Record" box.<BR>
+To enable those changes, just click the "Modify" button. To cancel the changes, click the "Cancel" link.<BR>
+<BR>
+Changes to records will be effective within 15 minutes.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howdeleterecord><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I delete a host entry?</B><BR>
+<BLOCKQUOTE>
+
+To delete a host entry, select your domain from "List All Domains".<BR>
+Find the host entry you would like to delete in the domain listing, and click "Delete" next to it.<BR>
+A box will come up with information on that entry.<BR>
+You need to either click "Delete" or "Cancel". Delete will actually delete the record from your domain. Cancel will go back to the domain listing.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+
+	
+<A name=howconfirmdomain><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I know my domain addition worked?</B><BR>
+<BLOCKQUOTE>
+
+When a new domain is added, it enters a Pending Domains holding area. You can click on the "List Pending Domains" link to verify the domain entered that area.<BR>
+When a domain enters the Pending Domains area, and upon any status changes to that pending domain, you will be e-mailed. Each domain is automatically checked against the root name servers to be sure it belongs on <TMPL_VAR NAME=SYSTEM_NAME>. ie. on name servers:
+<UL><TMPL_LOOP DNS_SERVERS>
+    <LI><TMPL_VAR NAME=FQDN>	<TMPL_VAR NAME=IP></TMPL_LOOP>
+</UL>
+<BR>
+After a domain has been verified, it is added to your list of available domains, and you can begin administering your domain. Your domain will become active within 30 minutes from the time it is added to your list of available domains. After that, any updates you make to the domain will be live within 15 minutes of when you make them.<BR>
+<BR>
+Beyond that, there are many tools online that you can use to verify domain resolution is working. The programs "dig", "host", and "nslookup", distributed with <B>BIND</B> (the Berkeley Internet Name Domain), are some good places to start. There are also standalone clones of these, and ports to other operating systems. If you want to verify name resolution, please look into these tools, or similar tools, and their documentation.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howconfirmrecord><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How do I know my modifications worked?</B><BR>
+<BLOCKQUOTE>
+
+Modifications to domains will take effect within 15 minutes.<BR>
+When you add, modify, or delete a record, the listing for the domain will show the text <I>[modified]</I> next to it's name. Every 15 minutes all domains are checked for changes, and those with changes are updated. Once the domain is updated, the <I>[modified]</I>text will go away and the changes you made will be active.<BR>
+<BR>
+Beyond that, there are many tools online that you can use to verify domain resolution is working. The programs "dig", "host", and "nslookup", distributed with <B>BIND</B> (the Berkeley Internet Name Domain), are some good places to start. There are also standalone clones of these, and ports to other operating systems. If you want to verify name resolution, please look into these tools, or similar tools, and their documentation.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+	
+<A name=howlongpropagate><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>How long does it take for a change to be effective?</B><BR>
+<B>or How long does it take for a domain to propagate?</B><BR>
+<BLOCKQUOTE>
+
+When adding a brand new domain, some verification steps are taken to assure that it belongs on our name servers. After verification has been successful, the domain will be added to your list of available domains. Domains pending verification are checked against the root name servers every 15 minutes, and any status changes will automatically be sent to your email address.<BR>
+<BR>
+Once it has been verified, it will be active on our name servers within 30 minutes.<BR>
+<BR>
+When adding or modifying DNS records on an existing domain, they will update on our name servers within 15 minutes. You'll see the text <I>[modified]</I> disappear from your dns record when this takes place.<BR>
+<BR>
+Domain names may take some time to propagate throughout the internet. Propagation throughout the internet is dependent upon each DNS server on the net. If a DNS server on someone else's network has your domain name cached in it's server (this happens whenever the domain lookup is done from their server by any of their customers) then it will have to expire before it pulls the fresh information from our name servers again. These update, and expire times are all defined in the SOA and TTL values for your domain, and are denoted as a number of seconds.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+
+
+<A name=preregistrar><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>My registrar requires the DNS servers to be configured with my domain before I can point it to those DNS servers. What do I do?</B><BR>
+<BLOCKQUOTE>
+
+Simply add your domain to our system first.<BR>
+<BR>
+When your domain is added to <TMPL_VAR NAME=SYSTEM_NAME>, it will sit in our pending queue, but a temporary entry will be created in our live dns servers for your domain. Then, go make the change with your registrar, and they'll be able to verify the domain is on our name servers.<BR>
+Once that move has taken place, <TMPL_VAR NAME=SYSTEM_NAME> will automatically move your domain from pending to active, and you will be able to edit your zone on through this site.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+
+
+<A name=dotdk><HR></A>
+<A class=blackonwhite HREF=#top ><I>[back to top]</I></A><BR>
+<B>Why does my domain delegation for my .dk domain fail with an error of "domainservers aren't registered DK Hostmaster A/S"?</B><BR>
+<BLOCKQUOTE>
+
+We are currently working on getting our name servers accepted by the DK
+Hostmaster. Unfortunately, it isn't a quick process. We currently don't
+have an estimate on when this will be completed, and judging by their
+"Rules for Registration, Administration and Conflict Resolution regarding
+Domain Names under Top Level Domain .dk", there is a chance we will not be
+able to reach approval due to political reasons.<BR>
+<BR>
+We will post information to our Server Status page (accessable via the link at the top of every page) when this has been completed.
+
+</BLOCKQUOTE>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+<BR>
+
+</BODY></HTML>

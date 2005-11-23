@@ -1,0 +1,144 @@
+body {
+margin-top : 10px;
+margin-right : 20px;
+margin-bottom : 20px;
+margin-left : 20px;
+font-family : Arial, Helvetica, sans-serif;
+font-weight : normal;
+background-color : #ffffff;
+color : #000000;
+}
+
+TD , TH {
+font-family : Arial, Helvetica, sans-serif;
+}
+
+.blackonwhite:link {
+color : #000000;
+font-weight : bold;
+}
+.blackonwhite:visited {
+color : #000000;
+font-weight : bold;
+}
+.blackonwhite:hover {
+color : #7d9fc4;
+font-weight : bold;
+}
+
+a:link {
+text-decoration : none;
+}
+
+a:visited {
+text-decoration : none;
+}
+
+a:hover {
+text-decoration : underline;
+color : #ffffff;
+}
+a  {color : #000000; }
+
+.tableheadlink:link {
+color : #FFFFFF;
+background-color : #7d9fc4;
+display : block;
+}
+
+.tableheadlink:visited {
+color : #FFFFFF;
+background-color : #7d9fc4;
+display : block;
+}
+
+.tableheadlink:hover {
+color : #000000;
+background-color : #98c2f0;
+display : block;
+}
+
+.sidelink:link {
+color : #000000;
+background-color : #d0e1f5;
+display : block;
+}
+
+.sidelink:visited {
+color : #000000;
+background-color : #d0e1f5;
+display : block;
+}
+
+.sidelink:hover {
+color : #000000;
+background-color : #98c2f0;
+display : block;
+}
+
+.sideform {
+color : #000000;
+background-color : #d0e1f5;
+display : block;
+}
+.sideform:hover {
+color : #000000;
+background-color : #98c2f0;
+display : block;
+}
+
+a.toplink:link {
+font-weight : bold;
+font-size : 80%;
+background-color : #98c2f0;
+padding-top : 2px;
+padding-right : 1px;
+padding-bottom : 2px;
+padding-left : 1px;
+display : block;
+}
+
+a.toplink:visited {
+font-weight : bold;
+font-size : 80%;
+background-color : #98c2f0;
+padding-top : 2px;
+padding-right : 1px;
+padding-bottom : 2px;
+padding-left : 1px;
+display : block;
+}
+
+a.toplink:hover {
+font-weight : bold;
+font-size : 80%;
+color : #FFFFFF;
+background-color : #4d75a0;
+padding-top : 2px;
+padding-right : 0px;
+padding-bottom : 2px;
+padding-left : 0px;
+border : #000000;
+border-style : solid;
+border-top-width : 0;
+border-right-width : 1px;
+border-bottom-width : 0;
+border-left-width : 1px;
+display : block;
+}
+/* background-color : #4d75a0; */
+
+/*
+font-family : "Trebuchet MS", Verdana, "Lucida Sans", Arial, Geneva, Helvetica, Helv, "Myriad Web", Syntax, sans-serif;
+h1 , h2 , h3 , h4 , h5 , h6 {
+font-family : Arial, Helvetica, sans-serif;
+font-weight : normal;
+}
+*/
+
+.head , a.topmenu {
+font-weight : bold;
+text-decoration : none;
+font-size : 80%;
+font-family : Verdana, "Lucida Sans", Arial, Geneva, Helvetica, Helv, "Myriad Web", Syntax, sans-serif;
+}

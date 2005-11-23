@@ -1,0 +1,28 @@
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/dns_crontab,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+############################
+## Publid-DNS.org Entries ##
+PERL5LIB=/usr/local/PublicDNSorg/lib
+PERLEXE=/usr/bin/perl
+UTILSDIR=/usr/local/PublicDNSorg/utils
+# send updates to zone records every 10min (5 for testing)
+*/10 * * * * $PERLEXE $UTILSDIR/update_zones.cron
+#*/5 * * * * $PERLEXE $UTILSDIR/update_zones.cron
+# regularly check for pending domains, every 30min (5 for testing)
+8,38 * * * * $PERLEXE $UTILSDIR/check_pending_domains.cron
+#*/5 * * * * $PERLEXE $UTILSDIR/check_pending_domains.cron
+# delete zones needing deleted every 8 hours
+1 4,12,19 * * * $PERLEXE $UTILSDIR/clean_deleted_zones.cron
+# daily clean unused accounts, every day at 6:01
+1 6 * * * $PERLEXE $UTILSDIR/clean_unused_accounts.cron
+# weekly automated backups, every sunday at 4:15
+15 4 * * 0 $PERLEXE $UTILSDIR/send_backups.cron weekly
+# monthly automated backups, first day of every month
+15 4 1 * * $PERLEXE $UTILSDIR/send_backups.cron monthly
+# weekly check for lame zones
+1 5 * * 0 $PERLEXE $UTILSDIR/find_lame_domains.cron
+

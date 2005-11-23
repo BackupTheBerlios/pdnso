@@ -1,0 +1,224 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/signup.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+signup.html - Public-DNS.org signup form.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+my $email_sig = $cfg->{'system'}->{'email_sig'} || 'support';
+my $root_uri  = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri     =~ s/\/+$//; # remove trailing slash
+
+my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $system_name      = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+#   if ($status <= 0)
+#   {
+#       &print_top(0);
+#       &print_error("Not Logged In.");
+#       return;
+#   }
+
+    if ($uid)
+    {
+        &print_top($uid,$thisscript,'signup');
+        &print_error("<BR><BLOCKQUOTE>You are logged in with a valid login.<BR><BR>If you are interested in creating a new login, please log out first, then create a new login.</BLOCKQUOTE><BR>");
+    } else {
+        if ($Q::action eq 'post')
+        {
+            if (! ($Q::login && $Q::passwd && $Q::confpasswd) )
+            {
+                &print_top($uid,$thisscript,'signup');
+                &print_error("Signup form was incomplete. Please go back and complete the form.");
+            } elsif ($Q::passwd ne $Q::confpasswd) {
+                &print_top($uid,$thisscript,'signup');
+                &print_error("Confirmation password did not match supplied password. Please go back and complete the form.");
+            } elsif (! ((length($Q::passwd) >= 6) && ($Q::passwd =~ /[^A-Za-z]/) && ($Q::passwd =~ /[A-Za-z]/)) ) {
+                &print_top($uid,$thisscript,'signup');
+                &print_error("Submitted password is not secure enough. Please go back and choose a password that is at least 6 characters long, and contains at least one letter, and one number or symbol.");
+            } elsif (! &unique_login($Q::login) ) {
+                &print_top($uid,$thisscript,'signup');
+                &print_error("The email address submitted ($Q::login) has already been used as a login for our system.<BR><BR>If you forgot your password, you can have it sent to you by filling out the form <A HREF=forgotpassword.html><U>here</U></A>.");
+            } else {
+                &signup($Q::login,$Q::passwd);
+            }
+        } elsif ($Q::confirm) {
+            &confirm($Q::confirm);
+        } else {
+            &default;
+        }
+    }
+}
+
+sub signup
+{
+    my ($login,$passwd) = @_;
+    my $pkey = &PublicDNS::Auth::add_pending_user($login,$passwd);
+    if ($pkey)
+    {
+        &print_top('',$thisscript,'signup');
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/signup_success.tmpl', cache => 1);
+        print $tmpl->output;
+        &print_bottom;
+
+        my $email_tmpl = HTML::Template->new(filename => $tmpl_dir . '/email_login_success.tmpl', cache => 1);
+        $email_tmpl->param(SYSTEM_NAME => $system_name);
+        $email_tmpl->param(EMAIL_SIG => $email_sig);
+        $email_tmpl->param(ROOT_URI => $root_uri);
+        $email_tmpl->param(LOGIN => $login);
+        $email_tmpl->param(PKEY => $pkey);
+        my %mail = (
+            from    => $reply_to,
+            to      => $login,
+            subject => "$system_name account verification",
+            msg     => $email_tmpl->output()
+            );
+        &send_mail(%mail);
+    } else {
+        &print_top('',$thisscript,'signup');
+        &print_error("An unknown error occurred while adding your login. Please go back and try again. If you continue to get this error, please send our support team an email at $reply_to");
+    }
+}
+sub confirm
+{
+    my $pkey = shift;
+
+    my ($puid,$login,$passwd,$plain_passwd,$signup) = SQLSelect('uid,login,passwd,plain_passwd,signup','logins_pending','PKey = ' . SQLQuote($pkey));
+    if ($puid)
+    {
+        my $exists = SQLSelect("uid","logins","login = " . SQLQuote($login));
+
+        if ($exists)
+        {
+            &print_top('',$thisscript,'signup');
+            &print_error("Requested login already exists. To signup for a new account with $system_name, please go to your signup page <A HREF=signup.html><U>HERE</U></A>.");
+            SQLDelete('logins_pending',"uid = $puid");
+            return 0;
+        }
+
+        my $oldownerid = SQLSelect('max(ownerid)','logins');
+        my $ownerid = $oldownerid + 1;
+        my $olduid = SQLSelect("max(uid)","logins");
+        SQLInsert('logins',['uid','ownerid','login','passwd','signup','loginclass'],["NULL",$ownerid,$login,$passwd,$signup,'free']);
+        my $newuid = SQLSelect("max(uid)","logins");
+        my $newownerid = SQLSelect('max(ownerid)','logins');
+
+        unless ($newownerid > $oldownerid)
+        {
+            SQLDelete('logins',"uid = $newuid") if ($newuid > $olduid);
+            &print_top('',$thisscript,'signup');
+            &print_error("An unknown error occurred while adding your login. Please go back and try again. If you continue to get this error, please send our support team an email at $reply_to");
+            return 0;
+        }
+
+        unless ($newuid > $olduid)
+        {
+            &print_top('',$thisscript,'signup');
+            &print_error("An unknown error occurred while adding your login. Please go back and try again. If you continue to get this error, please send our support team an email at $reply_to");
+            return 0;
+        }
+
+        SQLDelete('logins_pending',"uid = $puid");
+
+        my ($status,$login,$uid) = &PublicDNS::Auth::login($login,$plain_passwd);
+        &print_top($uid,$thisscript,'signup');
+        my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/signup_authorized.tmpl', cache => 1);
+        print $tmpl->output;
+        &print_bottom;
+
+        my $email_tmpl = HTML::Template->new(filename => $tmpl_dir . '/email_login_authorized.tmpl', cache => 1);
+        $email_tmpl->param(SYSTEM_NAME => $system_name);
+        $email_tmpl->param(EMAIL_SIG => $email_sig);
+        $email_tmpl->param(ROOT_URI => $root_uri);
+        $email_tmpl->param(LOGIN => $login);
+        $email_tmpl->param(PASSWORD=> $plain_passwd);
+        my %mail = (
+            from    => $reply_to,
+            to      => $login,
+            subject => "Welcome to $system_name",
+            msg     => $email_tmpl->output()
+            );
+        &send_mail(%mail);
+
+    } else {
+        &print_top('',$thisscript,'signup');
+        &print_error("The authorization key submitted does not exist. Maybe you already authorized your signup? If you forgot your password, please go <A HREF=forgotpassword.html><U>HERE</U></A>.");
+    }
+}
+
+sub unique_login
+{
+    my $login = shift;
+    my $exists = SQLSelect('uid','logins','login = ' . SQLQuote($login));
+    return ($exists ? 0 : 1);
+}
+
+sub default
+{
+    &print_top('',$thisscript,'signup');
+
+    my $tmpl = HTML::Template->new(filename => $tmpl_dir . '/signup.tmpl', cache => 1);
+    print $tmpl->output;
+
+    &print_bottom;
+}
+

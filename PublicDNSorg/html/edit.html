@@ -1,0 +1,1068 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/html/edit.html,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:31 $
+# $Author: unrtst $
+
+=head1 NAME
+
+edit.html - Public-DNS.org domain edit frontend.
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use CGI qw(:standard);
+use PublicDNS::CryptWrapper;
+use PublicDNS::DBlib;
+use PublicDNS::Auth;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+&PublicDNS::Auth::load_cgi_variables;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my ($config_statuses,$config_statusesmap) = load_config_statuses;
+my $valid_domain_chars = "A-Za-z0-9\\.-";
+my $thisscript = "http://" . $ENV{HTTP_HOST} . $ENV{SCRIPT_NAME};
+my $modscript = "/edit.html";
+my $listscript = "/list.html";
+
+my $root_uri         = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri            =~ s/\/+$//; # remove trailing slash
+my $redirector_cname = $cfg->{'url_redirector'}->{'hostname'}  || 'url_redirector.hostname.not.set';
+my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $system_name      = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+my $our_dns_server        = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
+my @required_ns_records   = split(',', $cfg->{'dig_settings'}->{'our_dns_server_name_list'});
+@required_ns_records      = ($our_dns_server) unless @required_ns_records;;
+
+my %valid_types = (
+    A   => 1,
+    AAAA    => 1,
+    MX  => 1,
+    TXT => 1,
+    NS  => 1,
+    CNAME   => 1,
+    HINFO   => 1,
+    PTR => 1
+    );
+
+&main;
+
+sub main
+{
+    if ($Q::action eq "logout")
+    {
+        &PublicDNS::Auth::logout();
+    }
+
+    my ($status,$login,$uid,$loginclass) = &PublicDNS::Auth::login($Q::login,$Q::passwd);
+
+    if ($status <= 0)
+    {
+        &print_top(0,$thisscript);
+        &print_error("Not Logged In.");
+        return;
+    }
+
+    if ( ($Q::action eq "delete") && ($Q::Cid =~ /^\d+$/) ) {
+        &domain_delete($Q::Cid,$uid,$loginclass);
+
+    } elsif ( ($Q::action eq "soa_edit") && ($Q::Cid =~ /^\d+$/) ) {
+        if ( ($Q::refresh =~ /^\d+$/) &&
+             ($Q::retry =~ /^\d+$/) &&
+             ($Q::expire =~ /^\d+$/) &&
+             ($Q::TTL =~ /^\d+$/) &&
+             ($Q::admin_email =~ /^\S+\@\S+\.\S+$/)
+           ) {
+            &soa_edit($Q::Cid,$uid,$loginclass);
+
+        } else {
+            &print_top($uid,$thisscript);
+            &print_error("Invalid data passed in for start of authority edit");
+            return;
+        }
+
+    } elsif ( ($Q::action eq "url_add") && ($Q::Cid =~ /^\d+$/) && $Q::forwardto ) {
+        &url_add($Q::Cid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "url_edit") && ($Q::urid =~ /^\d+$/) && $Q::forwardto) {
+        &url_edit($Q::urid,$uid,$loginclass);
+    } elsif ( ($Q::action eq "url_delete") && ($Q::urid =~ /^\d+$/) ) {
+        &url_delete($Q::urid,$uid,$loginclass);
+
+    } elsif ( ($Q::action eq "rr_add") && ($Q::Cid =~ /^\d+$/) && $valid_types{$Q::type}) {
+        if (
+#           ( ($Q::type eq "PTR") && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($Q::type eq "A") &&
+              ($Q::A =~ /^\d+$/) && ($Q::A >= 0) && ($Q::A <= 255) &&
+              ($Q::B =~ /^\d+$/) && ($Q::B >= 0) && ($Q::B <= 255) &&
+              ($Q::C =~ /^\d+$/) && ($Q::C >= 0) && ($Q::C <= 255) &&
+              ($Q::D =~ /^\d+$/) && ($Q::D >= 0) && ($Q::D <= 255)
+            ) ||
+            ( ($Q::type eq "AAAA") && (! &bad_ipv6_addr($Q::value)) ) ||
+            ( ($Q::type eq "MX") && ($Q::pref =~ /^\d\d?$/) && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($Q::type eq "HINFO") && ($Q::val1 =~ /^[$valid_domain_chars]+$/) && ($Q::val2 =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($Q::type eq "HINFO") && ($Q::val1 =~ /^[a-zA-Z0-9\ \t\-_=\+{}\[\]|\\:,.<>?\/~\`!\@#\$\%^\&\*\(\)]+$/) && ($Q::val2 =~ /^[a-zA-Z0-9\ \t\-_=\+{}\[\]|\\:,.<>?\/~\`!\@#\$\%^\&\*\(\)]+$/) ) ||
+            ( ($Q::type eq "CNAME") && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($Q::type eq "TXT") && ($Q::value =~ /^[a-zA-Z0-9\ \t\-_=\+{}\[\]|\\:,.<>?\/~\`!\@#\$\%^\&\*\(\)]+$/) ) ||
+            ( ($Q::type eq "NS") && ($Q::value =~ /^[$valid_domain_chars]+$/) )
+           ) {
+            &rr_add($Q::Cid,$uid,$Q::type,$loginclass);
+
+        } else {
+            &print_top($uid,$thisscript);
+
+            if (($Q::type eq "AAAA") && (my $error = &bad_ipv6_addr($Q::value)))
+            {
+                &print_error("Invalid IPv6 address: $error");
+            } else {
+                &print_error("Invalid data passed in for domain record type $Q::type");
+            }
+            return;
+        }
+
+    } elsif ( ($Q::action eq "rr_delete") && ($Q::RRid =~ /^\d+$/) ) {
+        &rr_delete($Q::RRid,$uid,$loginclass);
+
+    } elsif ( ($Q::action eq "rr_edit") && ($Q::RRid =~ /^\d+$/) ) {
+        my $type = SQLSelect("type","RRs","RRid = $Q::RRid");
+        unless ($type)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No matching record was found belonging to you.");
+            return;
+        }
+
+        if (
+#           ( ($type eq "PTR") && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($type eq "A") &&
+              ($Q::A =~ /^\d+$/) && ($Q::A >= 0) && ($Q::A <= 255) &&
+              ($Q::B =~ /^\d+$/) && ($Q::B >= 0) && ($Q::B <= 255) &&
+              ($Q::C =~ /^\d+$/) && ($Q::C >= 0) && ($Q::C <= 255) &&
+              ($Q::D =~ /^\d+$/) && ($Q::D >= 0) && ($Q::D <= 255)
+            ) ||
+            ( ($type eq "AAAA") && (! &bad_ipv6_addr($Q::value)) ) ||
+            ( ($type eq "MX") && ($Q::pref =~ /^\d\d?$/) && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($type eq "HINFO") && ($Q::val1 =~ /^[$valid_domain_chars]+$/) && ($Q::val2 =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($type eq "CNAME") && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($type eq "TXT") && ($Q::value =~ /^[$valid_domain_chars]+$/) ) ||
+            ( ($type eq "NS") && ($Q::value =~ /^[$valid_domain_chars]+$/) )
+           ) {
+            &rr_edit($Q::RRid,$uid,$type,$loginclass);
+
+        } else {
+            &print_top($uid,$thisscript);
+            if (($type eq "AAAA") && (my $error = &bad_ipv6_addr($Q::value)))
+            {
+                &print_error("Invalid IPv6 address: $error");
+            } else {
+                &print_error("Invalid data passed in for domain record type $Q::type");
+            }
+            return;
+        }
+
+    } elsif ( ($Q::action eq "master_edit") && ($Q::Cid =~ /^\d+$/) && ($Q::master) ) {
+        &master_edit($Q::Cid,$uid,$Q::master,$loginclass);
+
+    } else {
+        &default($uid);
+    }
+}
+
+sub url_add
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$status) = SQLSelect(
+        "ownerid,zone,tld,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    my $record = &build_valid_record($Q::record,$zone,$tld);
+
+    if (length($record) > 255)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Submitted resource record string is too long. Please go back and choose a shorter name. Submitted record after record validation was [$record]");
+        return;
+    }
+
+    my $our_cname = $redirector_cname;
+    $our_cname   .= '.' unless $our_cname =~ /\.$/; # append dot if needed
+    my ($q_record,$q_type,$q_ourcname) = SQLQuote($record,'CNAME',$our_cname);
+
+    # check for the redirect record
+    my $valid_cname_exists = SQLSelect("rr.RRid","RRs rr, RR_CNAME cname","rr.record = $q_record AND rr.RRid = cname.RRid AND cname.value = $q_ourcname");
+    my $conflict_exists = SQLSelect("RRid","RRs","record = $q_record");
+
+    if ( (!$valid_cname_exists) && $conflict_exists)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Submitted Record URL has already been defined in your zone, but is not a CNAME pointing to <B>$our_cname</B>. Please delete the record before adding a URL Redirection entry for it.");
+        return;
+    }
+
+    # if we make it here, we're ready to rock
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    unless ($valid_cname_exists)
+    {
+        # already verified it's ok to add, but it doesn't exist
+        my $log_action = "rr_add CNAME";
+        my $ttl = "86400"; # use default value
+
+        SQLInsert("RRs",["RRid","Cid","record","TTL","type"],
+                        ["NULL",$Cid,$record,$ttl,'CNAME']);
+
+        my $new_rrid = SQLSelect("max(RRid)","RRs");
+
+        SQLUpdate("conf",["modified"],[1],"Cid = $Cid");
+
+        if ($Q::value !~ /\.\s*$/) { $Q::value =~ s/\s*$//; $Q::value .= "."; }
+        SQLInsert("RR_CNAME",['RRid','value'],[$new_rrid,$our_cname]);
+        my $log_newvalues = "RR_CNAME RRid=$new_rrid record=$record TTL=$ttl $our_cname";
+
+        SQLInsert("log",
+            ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+            ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},$log_newvalues,'NULL'] );
+    }
+
+    # insert redirect
+    my $secure = $Q::secure ? 1 : 0;
+    my $cloak = $Q::cloak ? 1 : 0;
+    my $page = $Q::page ? $Q::page : "NULL";
+    my $title = $Q::title ? $Q::title : "NULL";
+    my $keywords = $Q::keywords ? $Q::keywords : "NULL";
+    my $description = $Q::description ? $Q::description : "NULL";
+    SQLInsert("urlredirect",
+        ['urid','ownerid','url','secure','forwardto','page','cloak','title','keywords','description'],
+        ['NULL',$ownerid,$record,$secure,$Q::forwardto,$page,$cloak,$title,$keywords,$description] );
+    my $newurid = SQLSelect("max(urid)","urlredirect");
+
+    my $log_action = "url_add";
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},"url_add urid=$newurid record=$record $Q::forwardto",'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub url_edit
+{
+    my ($urid,$uid,$loginclass) = @_;
+
+    my $ownerid = SQLSelect("ownerid","urlredirect","urid = $urid");
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No URL forwarder found by id $urid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No URL forwarder found by id $urid owned by you.");
+            return;
+        }
+    }
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+
+    # insert redirect
+    my $secure = $Q::secure ? 1 : 0;
+    my $cloak = $Q::cloak ? 1 : 0;
+    my $page = $Q::page ? $Q::page : "NULL";
+    my $title = $Q::title ? $Q::title : "NULL";
+    my $keywords = $Q::keywords ? $Q::keywords : "NULL";
+    my $description = $Q::description ? $Q::description : "NULL";
+    SQLUpdate("urlredirect",
+        ['secure','forwardto','page','cloak','title','keywords','description'],
+        [$secure,$Q::forwardto,$page,$cloak,$title,$keywords,$description],
+        "urid = $urid" );
+
+    my $log_action = "url_add";
+    my ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Q::Cid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},"url_edit urid=$urid $Q::forwardto",'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Q::Cid");
+}
+
+sub url_delete
+{
+    my ($urid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$url,$secure,$forwardto,$page,$cloak,$title,$keywords,$description) = SQLSelect(
+        "ownerid,url,secure,forwardto,page,cloak,title,keywords,description",
+        "urlredirect",
+        "urid = $urid");
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No URL Forwarder found by id $urid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No URL Forwarder found by id $urid owned by you.");
+            return;
+        }
+    }
+
+    my $log_action = "url_delete";
+
+    my $log_oldvalues = "urid=$urid url=$url secure=$secure forwardto=$forwardto page=$page cloak=$cloak title=$title keywords=$keywords description=$description";
+
+    SQLDelete("urlredirect","urid = $urid");
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    my ($zone,$tld) = SQLSelect("zone,tld","conf","Cid = $Q::Cid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},$log_oldvalues,'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Q::Cid");
+}
+
+sub master_edit
+{
+    my ($Cid,$uid,$master,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$old_master,$status) = SQLSelect(
+        "ownerid,zone,tld,master,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    if (! $old_master)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Domain $zone.$tld is not currently configured as a secondary zone. Unable to set master name server.");
+        return;
+    }
+
+    if ($master !~ /^[$valid_domain_chars]+$/)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Submitted master [$master] contains invalid characters.");
+        return;
+    }
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','oldvalues','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,'master_edit',$zone,$tld,$ENV{REMOTE_ADDR},
+         "Cid=$Cid master=$old_master",
+         "Cid=$Cid master=$master",
+         'NULL'] );
+
+    SQLUpdate("conf",['master','modified'],[$master,1],"Cid = $Cid");
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub soa_edit
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$serial,$old_refresh,$old_retry,$old_expire,$old_TTL,$old_admin_email,$status) = SQLSelect(
+        "ownerid,zone,tld,serial,refresh,retry,expire,TTL,admin_email,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    my $new_serial = $serial;
+    $new_serial++;
+    my $refresh = ($Q::refresh < 900) ? 900 : $Q::refresh;
+    my $retry = ($Q::retry < 900) ? 900 : $Q::retry;
+    my $expire = ($Q::expire < 900) ? 900 : $Q::expire;
+    my $TTL = ($Q::TTL < 900) ? 900 : $Q::TTL;
+    $Q::admin_email =~ s/\@/./;
+
+    SQLUpdate("conf",
+              ['serial','refresh','retry','expire','TTL','admin_email','modified'],
+              [$new_serial,$refresh,$retry,$expire,$TTL,$Q::admin_email,1],
+              "Cid = $Cid" );
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    SQLInsert("log",
+        ['Lid','login','ownerid','uid','action','zone','tld','remote_ip','oldvalues','newvalues','timestamp'],
+        ['NULL',$login,$ownerid,$uid,'soa_edit',$zone,$tld,$ENV{REMOTE_ADDR},
+         "Cid=$Cid serial=$serial refresh=$old_refresh retry=$old_retry expire=$old_expire TTL=$old_TTL admin_email=$old_admin_email",
+         "Cid=$Cid serial=$serial refresh=$refresh retry=$retry expire=$expire TTL=$TTL admin_email=$Q::admin_email",
+         'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub rr_edit
+{
+    my ($RRid,$uid,$type,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$Cid,$status) = SQLSelect(
+        "c.ownerid,c.zone,c.tld,c.Cid,c.status",
+        "conf c, RRs r",
+        "r.RRid = $RRid AND r.Cid = c.Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    my $record = &build_valid_record($Q::record,$zone,$tld);
+
+    if (length($record) > 255)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Submitted resource record string is too long. Please go back and choose a shorter name. Submitted record after record validation was [$record]");
+        return;
+    }
+
+    my ($q_record,$q_type) = SQLQuote($record,$type);
+
+    # check for conflicting records
+    if ($type =~ /^(A|AAAA)$/)
+    {
+        # can't mix with CNAME || PTR, can have more than one (round robin)
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'CNAME' OR type = 'PTR') AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"$type\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    } elsif ($type eq "CNAME") {
+        # can't mix with ANYTHING
+        # bind 8 was more lax, but the strict rule is CNAME's must be by themselves
+        # (bind 8 can be configured to allow multiple CNAMES via the
+        #  options { multiple-cnames yes; }; directive)
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"CNAME\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    } elsif ($type eq "HINFO") {
+        # can't have multiple identicle HINFO records, nor CNAME's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'HINFO' OR type = 'CNAME') AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"HINFO\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    } elsif ($type eq "MX") {
+        # can't mix with identicle PTR's nor CNAME's, can have multiple MX's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'PTR' OR type = 'CNAME') AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"MX\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    } elsif ($type eq "NS") {
+        # mixes and matches with anything but CNAME
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND type = 'CNAME' AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"NS\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+        my ($existing_ns_value_check) = SQLSelect("value","RR_$type","RRid = $RRid");
+        foreach my $required_ns (@required_ns_records)
+        {
+            if ($existing_ns_value_check =~ /^$required_ns$/i)
+            {   # don't let them delete our records
+                &print_top($uid,$thisscript);
+                &print_error("NS records for our name servers are required, and may not be deleted. <A HREF=\"$listscript?action=display\&Cid=$Cid\">Click here</A> to return to the display of $zone.$tld.");
+                return;
+            }
+        }
+
+    } elsif ($type eq "PTR") {
+        # can't mix with identicle PTR, A, MX, CNAME
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'PTR' OR type = 'A' OR type = 'MX' OR type = 'CNAME') AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"PTR\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    } elsif ($type eq "TXT") {
+        # can't mix with identicle TXT's now CNAME's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'TXT' OR type = 'CNAME') AND RRid != $RRid");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"TXT\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then adding this record.");
+            return;
+        }
+
+    }
+
+    # if we make it here, we're ready to rock
+    my ($log_newvalues,$log_oldvalues);
+    my $log_action = "rr_edit $type";
+
+    my $ttl;
+    if ($Q::TTL =~ /^\d+$/)
+    {
+        $ttl = ($Q::TTL < 900) ? 900 : $Q::TTL; # no smaller than 15min
+        $ttl = ($ttl > 15811200) ? 15811200 : $Q::TTL; # no larger than 6months
+    } else {
+        $ttl = "NULL"; # use default value from database
+    }
+
+    SQLUpdate("conf",["modified"],[1],"Cid = $Cid");
+
+    # types: A, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        my ($old_record,$old_ttl,$old_type,$old_A,$old_B,$old_C,$old_D) =
+            SQLSelect("r.record,r.TTL,r.type,v.A,v.B,v.C,v.D",
+                      "RRs r, RR_$type v",
+                      "r.RRid = $RRid AND r.RRid = v.RRid" );
+        SQLUpdate("RRs",["Cid","record","TTL","type"],
+                        [$Cid,$record,$ttl,$type],
+                        "RRid = $RRid");
+        SQLUpdate("RR_$type",['A','B','C','D'],[$Q::A,$Q::B,$Q::C,$Q::D],"RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$old_record TTL=$old_ttl $old_A.$old_B.$old_C.$old_D";
+        $log_newvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $Q::A.$Q::B.$Q::C.$Q::D";
+    } elsif ( $type =~ /^(CNAME|NS)$/ ) {
+        my ($old_record,$old_ttl,$old_type,$old_value) =
+            SQLSelect("r.record,r.TTL,r.type,v.value",
+                      "RRs r, RR_$type v",
+                      "r.RRid = $RRid AND r.RRid = v.RRid" );
+        SQLUpdate("RRs",["Cid","record","TTL","type"],
+                        [$Cid,$record,$ttl,$type],
+                        "RRid = $RRid");
+        if ($Q::value !~ /\.\s*$/) { $Q::value =~ s/\s*$//; $Q::value .= "."; }
+        SQLUpdate("RR_$type",['value'],[$Q::value],"RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$old_record TTL=$old_ttl $old_value";
+        $log_newvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $Q::value";
+    } elsif ( $type =~ /^(TXT|AAAA)$/ ) {
+        my ($old_record,$old_ttl,$old_type,$old_value) =
+            SQLSelect("r.record,r.TTL,r.type,v.value",
+                      "RRs r, RR_$type v",
+                      "r.RRid = $RRid AND r.RRid = v.RRid" );
+        SQLUpdate("RRs",["Cid","record","TTL","type"],
+                        [$Cid,$record,$ttl,$type],
+                        "RRid = $RRid");
+        SQLUpdate("RR_$type",['value'],[$Q::value],"RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$old_record TTL=$old_ttl $old_value";
+        $log_newvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $Q::value";
+    } elsif ( $type eq "MX" ) {
+        my ($old_record,$old_ttl,$old_type,$old_pref,$old_value) =
+            SQLSelect("r.record,r.TTL,r.type,v.pref,v.value",
+                      "RRs r, RR_$type v",
+                      "r.RRid = $RRid AND r.RRid = v.RRid" );
+        SQLUpdate("RRs",["Cid","record","TTL","type"],
+                        [$Cid,$record,$ttl,$type],
+                        "RRid = $RRid");
+        if ($Q::value !~ /\.\s*$/) { $Q::value =~ s/\s*$//; $Q::value .= "."; }
+        SQLUpdate("RR_$type",['pref','value'],[$Q::pref,$Q::value],"RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$old_record TTL=$old_ttl $old_pref $old_value";
+        $log_newvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $Q::value";
+    } elsif ( $type eq "HINFO" ) {
+        my ($old_record,$old_ttl,$old_type,$old_val1,$old_val2) =
+            SQLSelect("r.record,r.TTL,r.type,v.val1,v.val2",
+                      "RRs r, RR_$type v",
+                      "r.RRid = $RRid AND r.RRid = v.RRid" );
+        SQLUpdate("RRs",["Cid","record","TTL","type"],
+                        [$Cid,$record,$ttl,$type],
+                        "RRid = $RRid");
+        SQLUpdate("RR_$type",['val1','val2'],[$Q::val1,$Q::val2],"RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$old_record TTL=$old_ttl $old_val1 $old_val2";
+        $log_newvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $Q::val1 $Q::val2";
+    }
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','oldvalues','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},$log_oldvalues,$log_newvalues,'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub rr_add
+{
+    my ($Cid,$uid,$type,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$status) = SQLSelect(
+        "ownerid,zone,tld,status",
+        "conf",
+        "Cid = $Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No domain found by id $Cid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain found by id $Cid owned by you.");
+            return;
+        }
+    }
+
+    my $record = &build_valid_record($Q::record,$zone,$tld);
+
+    if (length($record) > 255)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("Submitted resource record string is too long. Please go back and choose a shorter name. Submitted record after record validation was [$record]");
+        return;
+    }
+
+    my ($q_record,$q_type) = SQLQuote($record,$type);
+
+    # check for conflicting records
+    if ($type =~ /^(A|AAAA)$/)
+    {
+        # can't mix with CNAME || PTR, can have more than one (round robin)
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'CNAME' OR type = 'PTR')");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"$type\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "CNAME") {
+        # can't mix with ANYTHING
+        # bind 8 was more lax, but the strict rule is CNAME's must be by themselves
+        # (bind 8 can be configured to allow multiple CNAMES via the
+        #  options { multiple-cnames yes; }; directive)
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"CNAME\" records may not be added if an identical record of any type [A,AAAA,CNAME,HINFO,MX,NS,PTR,TXT,etc] already exists. Please solve this conflict by removing or modifying the existing record for $record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "HINFO") {
+        # can't have multiple identicle HINFO records, nor CNAME's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'HINFO' OR type = 'CNAME')");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"HINFO\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "MX") {
+        # can't mix with identicle PTR's nor CNAME's, can have multiple MX's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'PTR' OR type = 'CNAME')");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"MX\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "NS") {
+        # mixes and matches with anything but CNAME
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND type = 'CNAME'");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"NS\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "PTR") {
+        # can't mix with identicle PTR, A, MX, CNAME
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'PTR' OR type = 'A' OR type = 'MX' OR type = 'CNAME')");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"PTR\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    } elsif ($type eq "TXT") {
+        # can't mix with identicle TXT's nor CNAME's
+        my ($rr_check,$type_check) = SQLSelect("RRid,type","RRs","record = $q_record AND (type = 'TXT' OR type = 'CNAME')");
+        if ($rr_check)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("Incompatable record.<BR>\"TXT\" records may not be added if an identical $type_check record already exists. Please solve this conflict by removing or modifying the existing $type_check record, and then add this record.");
+            return;
+        }
+
+    }
+
+    # if we make it here, we're ready to rock
+    my ($log_newvalues);
+    my $log_action = "rr_add $type";
+
+    my $ttl;
+    if ($Q::TTL =~ /^\d+$/)
+    {
+        $ttl = ($Q::TTL < 900) ? 900 : $Q::TTL; # no smaller than 15min
+        $ttl = ($ttl > 15811200) ? 15811200 : $Q::TTL; # no larger than 6months
+    } else {
+        $ttl = "NULL"; # use default value from database
+    }
+
+    SQLInsert("RRs",["RRid","Cid","record","TTL","type"],
+                    ["NULL",$Cid,$record,$ttl,$type]);
+
+    my $new_rrid = SQLSelect("max(RRid)","RRs");
+
+    SQLUpdate("conf",["modified"],[1],"Cid = $Cid");
+
+    # types: A, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        SQLInsert("RR_$type",['RRid','A','B','C','D'],[$new_rrid,$Q::A,$Q::B,$Q::C,$Q::D]);
+        $log_newvalues = "RR_$type RRid=$new_rrid record=$record TTL=$ttl $Q::A.$Q::B.$Q::C.$Q::D";
+    } elsif ( $type =~ /^(CNAME|NS)$/ ) {
+        if ($Q::value !~ /\.\s*$/) { $Q::value =~ s/\s*$//; $Q::value .= "."; }
+        SQLInsert("RR_$type",['RRid','value'],[$new_rrid,$Q::value]);
+        $log_newvalues = "RR_$type RRid=$new_rrid record=$record TTL=$ttl $Q::value";
+    } elsif ($type =~ /^(TXT|AAAA)$/) {
+        SQLInsert("RR_$type",['RRid','value'],[$new_rrid,$Q::value]);
+        $log_newvalues = "RR_$type RRid=$new_rrid record=$record TTL=$ttl $Q::value";
+    } elsif ( $type eq "MX" ) {
+        if ($Q::value !~ /\.\s*$/) { $Q::value =~ s/\s*$//; $Q::value .= "."; }
+        SQLInsert("RR_$type",['RRid','pref','value'],[$new_rrid,$Q::pref,$Q::value]);
+        $log_newvalues = "RR_$type RRid=$new_rrid record=$record TTL=$ttl $Q::value";
+    } elsif ( $type eq "HINFO" ) {
+        SQLInsert("RR_$type",['RRid','value1','value2'],[$new_rrid,$Q::val1,$Q::val2]);
+        $log_newvalues = "RR_$type RRid=$new_rrid record=$record TTL=$ttl $Q::val1 $Q::val2";
+    }
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},$log_newvalues,'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub rr_delete
+{
+    my ($RRid,$uid,$loginclass) = @_;
+
+    my ($status,$ownerid,$zone,$tld,$Cid,$record,$ttl,$type) = SQLSelect(
+        "c.status,c.ownerid,c.zone,c.tld,r.Cid,r.record,r.TTL,r.type",
+        "RRs r, conf c",
+        "r.RRid = $RRid AND r.Cid = c.Cid"
+        );
+
+    if ($loginclass eq 'admin')
+    {
+        if (! $ownerid)
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No record found by id $RRid.");
+            return;
+        }
+    } else {
+        my $conf_ownerid = SQLSelect("ownerid","logins","uid = $uid");
+
+        if ( (! $ownerid) || (! $conf_ownerid) || ($conf_ownerid != $ownerid) ||
+             ($status != $config_statuses->{'Active'}) )
+        {
+            &print_top($uid,$thisscript);
+            &print_error("No active domain record found by id $RRid owned by you.");
+            return;
+        }
+    }
+
+    if ($type eq "NS")
+    {
+        # mixes and matches with anything
+        my ($existing_ns_value_check) = SQLSelect("value","RR_$type","RRid = $RRid");
+        foreach my $required_ns (@required_ns_records)
+        {
+            if ($existing_ns_value_check =~ /^$required_ns$/i)
+            {   # don't let them delete our records
+                &print_top($uid,$thisscript);
+                &print_error("NS records for our name servers are required, and may not be deleted. <A HREF=\"$listscript?action=display\&Cid=$Cid\">Click here</A> to return to the display of $zone.$tld.");
+                return;
+            }
+        }
+    }
+
+    if ( ($type eq 'A') && ($record eq "$zone.$tld.") )
+    {   # check to make sure we're not removing the last base "A" record
+        my %all_a;
+        my $get_all_a = IteratedSQLSelect("RRid","RRs","Cid = $Cid AND type = 'A' AND record = " . SQLQuote("$zone.$tld.") );
+        while (my ($all_rrid) = $get_all_a->fetchrow_array)
+        {
+            $all_a{$all_rrid}++;
+        }
+        delete($all_a{$RRid}) if $all_a{$RRid};
+        # if we've still got some A record left, then we can safely remove
+        # the one they asked to delete
+        unless (%all_a)
+        {   # ok, don't have any other A records, don't let them delete it
+            &print_top($uid,$thisscript);
+            &print_error("This record may not be deleted. At least one \"A\" record at the base of the zone ($zone.$tld) is required. Please go back and edit this record if you would like to change it.");
+            return;
+        }
+    }
+
+
+    my ($log_oldvalues);
+    my $log_action = "rr_delete $type";
+
+    SQLUpdate("conf",["modified"],[1],"Cid = $Cid");
+
+    # types: A, AAAA, MX, TXT, NS, CNAME, HINFO, PTR
+    if ($type eq "A")
+    {
+        my ($A,$B,$C,$D) = SQLSelect("A,B,C,D","RR_A","RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $A.$B.$C.$D";
+    } elsif ( $type =~ /^(TXT|CNAME|NS|AAAA)$/ ) {
+        my ($value) = SQLSelect("value","RR_$type","RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $value";
+    } elsif ( $type eq "MX" ) {
+        my ($pref,$value) = SQLSelect("pref,value","RR_MX","RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $pref $value";
+    } elsif ( $type eq "HINFO" ) {
+        my ($val1,$val2) = SQLSelect("value1,value2","RR_HINFO","RRid = $RRid");
+        $log_oldvalues = "RR_$type RRid=$RRid record=$record TTL=$ttl $val1 $val2";
+    }
+
+    SQLDelete("RRs","RRid = $RRid");
+    SQLDelete("RR_$type","RRid = $RRid");
+
+    my $login = SQLSelect("login","logins","uid = $uid");
+    SQLInsert("log",
+        ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','newvalues','timestamp'],
+        ['NULL',$login,$uid,$ownerid,$log_action,$zone,$tld,$ENV{REMOTE_ADDR},$log_oldvalues,'NULL'] );
+
+    print redirect($listscript . "?action=display\&Cid=$Cid");
+}
+
+sub domain_delete
+{
+    my ($Cid,$uid,$loginclass) = @_;
+
+    my ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email);
+    if ($loginclass eq 'admin')
+    {
+        ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email) = SQLSelect(
+            "c.ownerid,c.zone,c.tld,c.serial,c.refresh,c.retry,c.expire,c.TTL,c.master,c.admin_email",
+            "conf c",
+            "c.Cid = $Cid"
+            );
+    } else {
+        ($ownerid,$zone,$tld,$serial,$refresh,$retry,$expire,$ttl,$master,$admin_email) = SQLSelect(
+            "c.ownerid,c.zone,c.tld,c.serial,c.refresh,c.retry,c.expire,c.TTL,c.master,c.admin_email",
+            "conf c, logins l",
+            "c.Cid = $Cid AND c.ownerid = l.ownerid AND l.uid = $uid"
+            );
+    }
+
+    unless ($zone)
+    {
+        &print_top($uid,$thisscript);
+        &print_error("No domain found by id $Cid owned by you.");
+        return;
+    }
+
+    my @login_emails;
+    my $get_login_emails = IteratedSQLSelect("login","logins","ownerid = $ownerid");
+    while (my ($email) = $get_login_emails->fetchrow_array)
+    {
+        push(@login_emails,$email);
+    }
+    $get_login_emails->finish;
+
+    my @emails;
+    foreach(@login_emails)
+    {   # make sure the addresses look somewhat legit
+        push(@emails) if (/^[^\@]+\@[^\@]+\.[^\@]+$/);
+    }
+
+    if (@emails)
+    {   # if we've got any emails, send them a backup
+        my $conv_admin_email = $admin_email;
+        $conv_admin_email =~ s/\@/./g;
+        my $_tmpl = HTML::Template->new(filename => $tmpl_dir . "/email_edit_delete.tmpl", cache => 1);
+        $_tmpl->param(ROOT_URI => $root_uri);
+        $_tmpl->param(SYSTEM_NAME => $system_name);
+        $_tmpl->param(DOMAIN => "$zone.$tld");
+        $_tmpl->param(DASHES => (length("$zone.$tld") x "-") );
+
+        if ($master)
+        {
+            $_tmpl->param(MASTER => $master);
+        } else {
+            my $dbfile = &build_db_file($Cid);
+            $_tmpl->param(DOMAINDATA => $dbfile);
+        }
+
+        my %mail = (
+            from    => $reply_to,
+            subject => "$system_name update to $zone.$tld",
+            msg     => $_tmpl->output
+            );
+        foreach(@emails)
+        {
+            $mail{to} = $_;
+            &send_mail(%mail);
+        }
+    }
+
+    if (&send_domain_delete($Cid,$uid))
+    {
+        my $login = SQLSelect("login","logins","uid = $uid");
+        SQLInsert("log",
+            ['Lid','login','uid','ownerid','action','zone','tld','remote_ip','oldvalues','timestamp'],
+            ['NULL',$login,$uid,$ownerid,'domain_delete',$zone,$tld,$ENV{REMOTE_ADDR},"Cid=$Cid ownerid=$ownerid master=$master admin_email=$admin_email",'NULL'] );
+        print redirect($listscript);
+    } else {
+        &print_top($uid,$thisscript);
+        &print_error("Error removing zone, no action will be taken. Please contact support.");
+    }
+}
+
+sub default
+{
+    my $uid = shift;
+    &print_top($uid,$thisscript);
+    &print_error("No valid action has been specified");
+}
+

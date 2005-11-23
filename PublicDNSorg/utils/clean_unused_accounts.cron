@@ -1,0 +1,164 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/clean_unused_accounts.cron,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+=head1 NAME
+
+clean_unused_accounts.cron - Public-DNS.org script to removed any unused accounts. Should be run from cron daily.
+
+=head1 SEE ALSO
+
+utils/dns_crontab
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use HTML::Template;
+use PublicDNS::DBlib;
+use PublicDNS::Utils;
+use PublicDNS::Auth; # to get the tmpl_dir set
+use PublicDNS::Config;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $email_sig = $cfg->{'system'}->{'email_sig'} || 'support';
+my $root_uri  = $cfg->{'system'}->{'root_uri'} || 'http://localhost.localdomain';
+$root_uri     =~ s/\/+$//; # remove trailing slash
+
+my $reply_to    = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $admin_email = $cfg->{'system'}->{'admin_email_addr'}    || 'root';
+my $system_name = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
+
+my $warn_time = (14*24*60*60); # 14 days
+my $delete_time = (31*24*60*60); # 31 days
+my $now = time;
+
+&main;
+
+sub main
+{
+    # get users w/out any domains signed up more than $warn_time ago
+    # since running daily, get for one day span about
+    # might get a few mulitple warnings, but I don't wanna log that I've
+    # sent a notification, so I don't care right now
+    my @warning_users;
+    my $min_warn_time = $now - $warn_time - (25*60*60);
+    my $max_warn_time = $now - $warn_time;
+    my $get_users = IteratedSQLSelect('ownerid,login','logins',"UNIX_TIMESTAMP(signup) > $min_warn_time AND UNIX_TIMESTAMP(signup) < $max_warn_time AND loginclass != 'admin'");
+    while (my ($ownerid,$login) = $get_users->fetchrow_array)
+    {
+        my $has_domain = SQLSelect('Cid','conf',"ownerid = $ownerid");
+        push(@warning_users,$login) unless($has_domain);
+    }
+    $get_users->finish;
+
+    my @kill_users;
+    my $kill_time = $now - $delete_time;
+    my $kill_users = IteratedSQLSelect('uid,ownerid,login','logins',"UNIX_TIMESTAMP(signup) < $kill_time AND loginclass != 'admin'");
+    while (my ($uid,$ownerid,$login) = $kill_users->fetchrow_array)
+    {
+        my $has_domain = SQLSelect('Cid','conf',"ownerid = $ownerid");
+        unless($has_domain)
+        {
+            push(@kill_users,[$uid,$ownerid,$login]);
+            SQLDelete('logins',"uid = $uid");
+        }
+    }
+    $kill_users->finish;
+
+    ########################
+    # send warn_users e-mail
+    my $warntmpl = HTML::Template->new(filename => $tmpl_dir . "/email_unused_account_warning.tmpl", cache => 0);
+    $warntmpl->param(SYSTEM_NAME => $system_name);
+    $warntmpl->param(EMAIL_SIG => $email_sig);
+    $warntmpl->param(ROOT_URI => $root_uri);
+    my %warn_mail = (
+        from    => $reply_to,
+        subject => "$system_name login approaching expiration",
+        msg     => $warntmpl->output
+        );
+
+    foreach(@warning_users)
+    {
+        $warn_mail{to} = $_;
+        send_mail(%warn_mail);
+        $warn_mail{to} = "";
+    }
+
+    #########################
+    # send kill_users e-mails
+    my $killtmpl = HTML::Template->new(filename => $tmpl_dir . "/email_unused_account_delete.tmpl", cache => 0);
+    $killtmpl->param(SYSTEM_NAME => $system_name);
+    $killtmpl->param(EMAIL_SIG => $email_sig);
+    $killtmpl->param(ROOT_URI => $root_uri);
+    my %kill_mail = (
+        from    => $reply_to,
+        subject => "$system_name login termination",
+        msg     => $killtmpl->output
+        );
+    foreach my $user_ref (@kill_users)
+    {
+        $kill_mail{to} = $user_ref->[2];
+        send_mail(%kill_mail);
+        $kill_mail{to} = "";
+    }
+
+    ##########################
+    # send mail to us w/ stats
+    my %admin_mail = (
+        from    => $reply_to,
+        to      => $admin_email,
+        subject => "$system_name login warnings and terminations"
+        );
+    if (@warning_users)
+    {
+        $admin_mail{msg} .= "The following users have been sent a warning e-mail informing them that\ntheir account will be terminated in 14 days unless the begin to use it.\n";
+        foreach(@warning_users)
+        {
+            $admin_mail{msg}  .= "\t$_\n";
+        }
+        $admin_mail{msg} .= "\n\n";
+    }
+    if (@kill_users)
+    {
+        $admin_mail{msg} .= "The following users accounts have been terminated.\nThey had no pending nor existing domains, and were added at\nlease one month ago.\nThey were also sent an notification to this affect.\n";
+        foreach my $user_ref (@kill_users)
+        {
+            $admin_mail{msg}  .= "\t$user_ref->[2]
+        uid=$user_ref->[0]
+        ownerid=$user_ref->[1]\n";
+        }
+        $admin_mail{msg} .= "\n\n";
+    }
+    if ($admin_mail{msg})
+    {
+        &send_mail(%admin_mail);
+    }
+}

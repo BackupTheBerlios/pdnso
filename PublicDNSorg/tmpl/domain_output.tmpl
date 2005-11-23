@@ -1,0 +1,131 @@
+
+<BR>
+
+<script type="text/javascript" src="tablesort.js"></script>
+
+<TABLE BORDER=0 CELLSPACING=0 CELLPADDING=0 WIDTH=100% BGCOLOR=#000000>
+<TR><TD>
+<table border="0" cellspacing="1" cellpadding="0" width="100%">
+	<TR>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=2><TMPL_IF MODIFIED><FONT SIZE=-1 COLOR=#FFFFFF><I>[modified]</I></FONT></TMPL_IF></TH>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=3><FONT COLOR=#FFFFFF><TMPL_VAR NAME=DOMAIN></FONT></TH>
+		<TH BGCOLOR=#7d9fc4 COLSPAN=2><A class=tableheadlink HREF="<TMPL_VAR NAME=DOMAIN_DELETE>">Delete</A></TH>
+	</TR>
+	<TR VALIGN=middle>
+		<TH BGCOLOR=#d0e1f5 COLSPAN=2 ALIGN=CENTER><A class=tableheadlink HREF="<TMPL_VAR NAME=SOA_EDIT>">Edit SOA</A></TH>
+		<TD BGCOLOR=#d0e1f5 COLSPAN=4><TABLE CELLSPACING=0 CELLPADDING=2 BORDER=0>
+			<TR VALIGN=top>
+				<TD ROWSPAN=8>SOA:</TD>
+				<TD COLSPAN=2>&nbsp;</TD>
+			</TR>
+			<TR><TD><TMPL_VAR NAME=SOA_NAMESERVER></TD><TD>: Authoritive Server</TD></TR>
+			<TR><TD><TMPL_VAR NAME=ADMIN_EMAIL></TD><TD>: Admin Email</TD></TR>
+			<TR><TD><TMPL_VAR NAME=SERIAL></TD><TD>: Serial</TD></TR>
+			<TR><TD><TMPL_VAR NAME=REFRESH></TD><TD>: Refresh</TD></TR>
+			<TR><TD><TMPL_VAR NAME=RETRY></TD><TD>: Retry</TD></TR>
+			<TR><TD><TMPL_VAR NAME=EXPIRE></TD><TD>: Expire</TD></TR>
+			<TR><TD><TMPL_VAR NAME=TTL></TD><TD>: TTL</TD></TR>
+			</TABLE>
+		</TD>
+	</TR>
+	<FORM METHOD=post action="<TMPL_VAR NAME=POSTSCRIPT>">
+	<INPUT TYPE=hidden name=Cid value="<TMPL_VAR NAME=CID>">
+	<INPUT TYPE=hidden name=action value=rr_add>
+	<TR>
+		<TD BGCOLOR=#d0e1f5 COLSPAN=2 ALIGN=CENTER><INPUT TYPE=submit value="Add Record"></TD>
+		<TD BGCOLOR=#d0e1f5 COLSPAN=4>Add Type: <SELECT name=type>
+			<OPTION>A
+			<OPTION VALUE=AAAA>AAAA (IPv6)
+			<OPTION>CNAME
+			<OPTION>HINFO
+			<OPTION>MX
+			<OPTION>NS
+			<OPTION>TXT
+			<OPTION VALUE=URL>URL Forwarder
+			</SELECT> Resource Record
+		</TD>
+	</TR>
+	</FORM>
+</table>
+</TD></TR>
+</TABLE>
+<TABLE BORDER=0 CELLSPACING=0 CELLPADDING=0 WIDTH=100% BGCOLOR=#000000>
+<TR><TD>
+<table onClick="sortColumn(event)" border="0" cellspacing="1" cellpadding="0" width="100%">
+<thead>
+	<TR>
+		<TD BGCOLOR=#98c2f0 ALIGN=right COLSPAN=5>(click on column headers to sort)</TD>
+	</TR>
+	<TR>
+		<TD BGCOLOR=#98c2f0 ALIGN=center><B>Action</B></TD>
+		<TD BGCOLOR=#98c2f0 ALIGN=center><B>Record</B></TD>
+		<TD BGCOLOR=#98c2f0 ALIGN=center><B>TTL</B></TD>
+		<TD BGCOLOR=#98c2f0 ALIGN=center><B>Type</B></TD>
+		<TD BGCOLOR=#98c2f0 ALIGN=center><B>Values</B></TD>
+	</TR>
+</thead>
+
+<tbody>
+	<TMPL_LOOP RECORDS>
+		<TR>
+			<TD BGCOLOR=#d0e1f5>
+				<table border="0" cellspacing="1" cellpadding="0" width="100%"><TR>
+				<TH BGCOLOR=#d0e1f5><A class=sidelink HREF="<TMPL_VAR NAME=EDIT>">Edit</A></TH>
+				<TH BGCOLOR=#d0e1f5><A class=sidelink HREF="<TMPL_VAR NAME=DELETE>">Delete</A></TH>
+				</TR></TABLE>
+			</TD>
+			<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=RECORD></TD>
+			<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=TTL></TD>
+			<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=TYPE></TD>
+			<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=VALUE></TD>
+		</TR>
+	</TMPL_LOOP>
+</tbody>
+</table>
+</TD></TR>
+</TABLE>
+
+	<TMPL_IF URLREDIRECTS>
+<TABLE BORDER=0 CELLSPACING=0 CELLPADDING=0 WIDTH=100% BGCOLOR=#000000>
+<TR><TD>
+<table border="0" cellspacing="1" cellpadding="0" width="100%">
+		<TR>
+			<TH BGCOLOR=#d0e1f5 COLSPAN=6>URL Forwarders</TH>
+		</TR>
+		<TR>
+			<TH BGCOLOR=#98c2f0 COLSPAN=2>Action</TH>
+			<TH BGCOLOR=#98c2f0>Record</TH>
+			<TH BGCOLOR=#98c2f0 COLSPAN=2>Cloaked</TH>
+			<TH BGCOLOR=#98c2f0>ForwardTo</TH>
+		</TR>
+		<TMPL_LOOP URLREDIRECTS>
+			<TR>
+				<TH BGCOLOR=#d0e1f5><A class=sidelink HREF="<TMPL_VAR NAME=EDIT>">Edit</A></TH>
+				<TH BGCOLOR=#d0e1f5><A class=sidelink HREF="<TMPL_VAR NAME=DELETE>">Delete</A></TH>
+				<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=URL></TD>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=2><TMPL_IF CLOAK>CLOAKED<TMPL_ELSE>No</TMPL_IF></TD>
+				<TD BGCOLOR=#d0e1f5><TMPL_VAR NAME=FORWARDTO></TD>
+			</TR>
+			<TMPL_IF CLOAK>
+			<TR>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=2>&nbsp;</TD>
+				<TD BGCOLOR=#d0e1f5>Title:</TD>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=3><TMPL_VAR NAME=TITLE></TD>
+			</TR>
+			<TR>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=2>&nbsp;</TD>
+				<TD BGCOLOR=#d0e1f5>Keywords:</TD>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=3><TMPL_VAR NAME=KEYWORDS></TD>
+			</TR>
+			<TR>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=2>&nbsp;</TD>
+				<TD BGCOLOR=#d0e1f5>Description:</TD>
+				<TD BGCOLOR=#d0e1f5 COLSPAN=3><TMPL_VAR NAME=DESCRIPTION></TD>
+			</TR>
+			</TMPL_IF>
+		</TMPL_LOOP>
+	</TMPL_IF>
+	
+	</TABLE>
+</TD></TR>
+</TABLE>

@@ -1,0 +1,148 @@
+#!/usr/bin/perl
+# ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
+
+# $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/update_zones.cron,v $
+# $Revision: 1.1 $
+# $Date: 2005/11/23 03:42:57 $
+# $Author: unrtst $
+
+=head1 NAME
+
+update_zones.cron - Public-DNS.org script which sends updates to zone records to the primary pdsysd.pl daemon. Should be run from cron every 10 minutes or so.
+
+=head1 SEE ALSO
+
+utils/dns_crontab
+
+=head1 AUTHOR
+
+Joshua I. Miller <unrtst@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (c) 2002 by PurifiedData, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation. (see COPYING)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA
+
+=cut
+
+
+use strict;
+use IO::Socket;
+use PublicDNS::CryptWrapper;
+use PublicDNS::DBlib;
+use PublicDNS::Utils;
+use PublicDNS::Config;
+
+my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
+
+my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
+my $admin_email      = $cfg->{'system'}->{'admin_email_addr'}    || 'root';
+
+my $send_individual_reloads = 0;
+
+my $updated_a_zone;
+my $get_changes = IteratedSQLSelect("Cid,zone,tld,serial","conf","modified = 1 AND master IS NULL");
+while (my ($Cid,$zone,$tld,$serial) = $get_changes->fetchrow_array)
+{
+    $updated_a_zone++;
+    my $dbfile_data = &build_db_file($Cid);
+    $serial++; # wanted to do this in the SQLUpdate, like so:
+        # UPDATE conf SET serial = serial + 1 WHERE Cid = $Cid
+        # but PDlib doesn't like that.
+
+    # send query to primary name server
+    my $sock = new IO::Socket::INET (
+        LocalAddr   => $cfg->{'daemon'}->{'webserver_addr'} || '',
+        PeerAddr    => $cfg->{'daemon_master'}->{'addr'},
+        PeerPort    => $cfg->{'daemon_master'}->{'port'} || 5201,
+        Proto       => 'tcp'
+        );
+    if ($sock)
+    {
+        my $query = encrypt( ('update',"$zone.$tld",$Cid,$dbfile_data,$send_individual_reloads) );
+        print $sock $query;
+        close($sock);
+        SQLUpdate("conf",['serial','modified'],[$serial,0],"Cid = $Cid");
+
+    } else { # end if $sock
+        my %mail = (
+            from    => $reply_to,
+            to      => $admin_email,
+            subject => 'DNS Socket Open to Daemon FAILED - update_zones.cron',
+            msg     => "Failed trying to send update command for domain:
+    $zone.$tld
+    for Cid: $Cid
+" . localtime()
+            );
+        &send_mail(%mail);
+    } # end else from if $sock
+
+    # if sending "reload domain.com" for each individual zone ends up being
+    # faster, uncomment the following, and comment out teh stuff at bottom
+    if ($send_individual_reloads)
+    {
+        my $sock = new IO::Socket::INET (
+            LocalAddr   => $cfg->{'daemon'}->{'webserver_addr'} || '',
+            PeerAddr    => $cfg->{'daemon_master'}->{'addr'},
+            PeerPort    => $cfg->{'daemon_master'}->{'port'} || 5201,
+            Proto       => 'tcp'
+            );
+        if ($sock)
+        {
+            my $query = encrypt( ('system','reload',"$zone.$tld",$Cid,$send_individual_reloads) );
+            print $sock $query;
+            close($sock);
+        } else { # end if $sock
+            my %mail = (
+                from    => $reply_to,
+                to      => $admin_email,
+                subject => 'DNS Socket Open to Daemon FAILED - update_zones.cron',
+                msg     => "Failed trying to send reload command for domain:
+    $zone.$tld
+    for Cid: $Cid
+" . localtime()
+                );
+            &send_mail(%mail);
+        } # end else from if $sock
+    }
+
+}
+$get_changes->finish;
+
+
+if ($updated_a_zone && (! $send_individual_reloads) )
+{
+    my $sock = new IO::Socket::INET (
+        LocalAddr   => $cfg->{'daemon'}->{'webserver_addr'} || '',
+        PeerAddr    => $cfg->{'daemon_master'}->{'addr'},
+        PeerPort    => $cfg->{'daemon_master'}->{'port'} || 5201,
+        Proto       => 'tcp'
+        );
+    if ($sock)
+    {
+        my $query = encrypt( ('system','reload',$send_individual_reloads) );
+        print $sock $query;
+        close($sock);
+    } else { # end if $sock
+        my %mail = (
+            from    => $reply_to,
+            to      => $admin_email,
+            subject => 'DNS Socket Open to Daemon FAILED - update_zones.cron',
+            msg     => "Failed trying to send global reload command from update_zones.cron\n" . localtime()
+            );
+        &send_mail(%mail);
+    } # end else from if $sock
+}
