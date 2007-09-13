@@ -48,7 +48,7 @@ my $DEBUG = 0;
 
 my @root_dns_servers = split(',', $cfg->{'dig_settings'}->{'root_name_servers'});
 @root_dns_servers    = ('198.41.0.4','192.58.128.30','202.12.27.33','198.32.64.12') unless @root_dns_servers;
-my $dig              = $cfg->{'dig_settings'}->{'dig_exe'}              || '/usr/local/bin/dig'; # depreciated
+my $dig              = $cfg->{'dig_settings'}->{'dig_exe'}              || 'dig'; # depreciated
 my $our_dns_server   = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
 
 

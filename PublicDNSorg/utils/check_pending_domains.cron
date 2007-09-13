@@ -2,8 +2,8 @@
 # ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
 
 # $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/utils/check_pending_domains.cron,v $
-# $Revision: 1.1 $
-# $Date: 2005/11/23 03:42:57 $
+# $Revision: 1.2 $
+# $Date: 2007/09/13 05:20:04 $
 # $Author: unrtst $
 
 
@@ -53,7 +53,7 @@ my $cfg = PublicDNS::Config::load_cfg() or die "Unable to load config file.";
 my $DEBUG = 0;
 my @root_dns_servers = split(',', $cfg->{'dig_settings'}->{'root_name_servers'});
 @root_dns_servers    = ('198.41.0.4','192.58.128.30','202.12.27.33','198.32.64.12') unless @root_dns_servers;
-my $dig              = $cfg->{'dig_settings'}->{'dig_exe'}              || '/usr/local/bin/dig'; # depreciated
+my $dig              = $cfg->{'dig_settings'}->{'dig_exe'}              || 'dig'; # depreciated
 my $our_dns_server   = $cfg->{'dig_settings'}->{'our_dns_server_name'}  || 'dig_settings.our_dns_server_name.not.set';
 my $reply_to         = $cfg->{'system'}->{'reply_to_email_addr'} || 'root';
 my $system_name      = $cfg->{'system'}->{'generic_system_name'} || 'Public-DNS.org DNS Management System';
