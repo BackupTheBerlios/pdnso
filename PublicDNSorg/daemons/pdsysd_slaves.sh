@@ -2,14 +2,14 @@
 # ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
 
 # $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/daemons/pdsysd_slaves.sh,v $
-# $Revision: 1.2 $
-# $Date: 2007/09/13 05:20:30 $
+# $Revision: 1.3 $
+# $Date: 2007/09/16 22:13:04 $
 # $Author: unrtst $
 
 # shell script to start pdsysd_slave.pl
 start() {
-    if [ -x /usr/local/pdsys/pdsysd_slaves.pl ]; then
-        /usr/local/pdsys/pdsysd_slaves.pl &
+    if [ -x /usr/local/bin/pdsysd_slaves.pl ]; then
+        /usr/local/bin/pdsysd_slaves.pl &
         echo -n ' pdsysd'
     fi
     return 0
