@@ -30,8 +30,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 =cut
 
 # $Source: /home/xubuntu/berlios_backup/github/tmp-cvs/pdnso/Repository/PublicDNSorg/lib/PublicDNS/Utils.pm,v $
-# $Revision: 1.1 $
-# $Date: 2007/09/13 05:53:04 $
+# $Revision: 1.2 $
+# $Date: 2007/09/16 23:37:33 $
 # $Author: unrtst $
 
 use strict;
@@ -342,7 +342,7 @@ sub bad_ipv6_addr
 sub send_mail
 {
     my %mail = @_;
-    my $smtp = Net::SMTP->new($smtphost);
+    my $smtp = Net::SMTP->new($smtphost) or die "Config error: unable to connect to mailserver [$smtphost].";
     $smtp->mail($mail{from});
     $smtp->to($mail{to});
     $smtp->data();
