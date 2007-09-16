@@ -1,8 +1,8 @@
 package PublicDNS::Config;
 # ex: set tabstop=4 expandtab smarttab softtabstop=4 shiftwidth=4:
 
-# $Revision: 1.1 $
-# $Date: 2007/09/13 05:53:04 $
+# $Revision: 1.2 $
+# $Date: 2007/09/16 22:56:09 $
 
 =head1 NAME
 
@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 =cut
 
 use vars qw($VERSION);
-$VERSION = '2.001';
+$VERSION = '2.002';
 
 use strict;
 use Config::Tiny();

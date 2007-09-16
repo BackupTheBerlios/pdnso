@@ -225,6 +225,18 @@ If it doesn't look right, or something breaks, check your logs and fix the probl
 
 If all seems to be ok, finish up editing the config file.
 
+B<NOTE>: Config file permissions: The config file contains sensitive information (eg. db connection user/password information). Its permissions should be changed such that the web server user is able to read the file, your user may be able to read/write the file, and no one else on the system should be able to read the file. How best to do this will depend greatly on how your system is configured, but here's a common example:
+
+    apache process running as user "apache", group "apache".
+    your username is "myuser".
+    $ cd lib/PublicDNS
+    $ chown myuser:apache Config.ini
+    $ chmod 640 Config.ini
+    $ ls -l Config.ini
+    -rw-r----- 1 myuser  apache    9101 2007-09-13 09:35 Config.ini
+
+
+
 =head3 Page updates
 
 The following pages will need updated by you. They are site specific,
@@ -244,6 +256,10 @@ Statement of privacy policy
 =item * tmpl/domaindisputes.tmpl
 
 Domain dispute policy
+
+=item * tmpl/restrictions.tmpl
+
+Restrictions of use policy
 
 =item * tmpl/spam.tmpl
 
@@ -268,8 +284,7 @@ still be able to access the page.
 We recommend protecting this directory by means of your web servers 
 authentication directives (eg. .htaccess files).
 
-Here is an example of .htaccess file contents (put it in the 
-html/admin/ directory):
+An example .htaccess file has been provided in the admin directory. You will probably need to modify that file to set the path to your local password file. Ex.
 
 	AuthUserFile /usr/local/PublicDNSorg/htpasswd
 	AuthGroupFile /dev/null

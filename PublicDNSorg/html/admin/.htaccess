@@ -1,0 +1,5 @@
+AuthUserFile /usr/local/PublicDNSorg/htpasswd
+AuthGroupFile /dev/null
+AuthName "DNS Management System"
+AuthType Basic
+require valid-user
